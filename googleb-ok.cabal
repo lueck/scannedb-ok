@@ -30,6 +30,7 @@ library
                 , Pdf.Extract.PdfToolBox
                 , Pdf.Extract.Lines
                 , Pdf.Extract.Linearize
+                , Pdf.Extract.PyPdfMiner
   other-modules:
                 Paths_googleb_ok
   hs-source-dirs:
@@ -41,6 +42,11 @@ library
               , pdf-toolbox-document == 0.1.*
               , split
               , text
+              , xeno
+              , bytestring
+              , lens
+              , mtl
+              , utf8-string
   default-language: Haskell2010
 
 executable googleb-ok-exe
