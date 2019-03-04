@@ -4,6 +4,10 @@ module Pdf.Extract.PyPdfMiner
   , PdfMinerGlyph(..)
   ) where
 
+-- | Parse the XML representation of glyphs rendered from pdfminer
+-- with @pdf2txt.py -t xml ...@.
+
+
 import Xeno.SAX
 import System.IO
 import System.Environment
@@ -40,8 +44,8 @@ initState = PdfMinerState Nothing Nothing Nothing Nothing Nothing []
 mkGlyph :: PdfMinerState -> [PdfMinerGlyph]
 mkGlyph s = maybeToList $ PdfMinerGlyph <$> Just (s^.text) <*> (s^.bbox) <*> (s^.font)
 
--- | Parse xml rendered from pdfminers @pdf2txt.py -t xml@. We use the
--- fast sax parser `process` from `Xeno.SAX` package.
+-- | Parse xml rendered from pdfminers. We use the fast sax parser
+-- `process` from `Xeno.SAX` package.
 parseXml :: ByteString -> IO ([PdfMinerGlyph])
 parseXml bs = do
   (_, s) <- runStateT
@@ -81,9 +85,14 @@ txt t = do
   s <- get
   put $ s & text .~ (rightToMaybe $ T.decodeUtf8' t)
   return ()
-  
-doNothing _ = pure ()
-doNothing2 _ _ = pure ()
+
+doNothing :: Monad m => ByteString -> m ()
+doNothing _ = return ()
+{-# INLINE doNothing #-}
+
+doNothing2 :: Monad m => ByteString -> ByteString -> m ()
+doNothing2 _ _ = return ()
+{-# INLINE doNothing2 #-}
 
 rightToMaybe :: Either a b -> Maybe b
 rightToMaybe = either (const Nothing) Just
