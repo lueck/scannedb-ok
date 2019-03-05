@@ -15,6 +15,8 @@ import qualified Data.Text as T
 import qualified Data.Text.IO as T
 import Data.Maybe
 import qualified Data.ByteString as B
+import qualified Data.Range.Parser as R
+import qualified Data.Range.Range as R
 
 import Pdf.Extract.Lines
 import Pdf.Extract.Linearize
@@ -26,6 +28,7 @@ import Pdf.Extract.Glyph
 data PdfToText = PdfToText
   { inputMethod :: Maybe InputMethod
   , outputMethod :: Maybe OutputMethod
+  , pages :: String -- Maybe (Range Int)
   , inputFile :: String
   }
 
@@ -63,7 +66,11 @@ pdfToText_ = PdfToText
                   (short 'g'
                    <> long "glyphs"
                    <> help "Show the information about the glyphs found in the document.")))
-                
+  <*> strOption (short 'p'
+                 <> long "pages"
+                 <> help "Ranges of pages to extract. Defaults to all."
+                 <> value "*"
+                 <> metavar "PAGES")
   <*> argument str (metavar "INPUTFILE")
 
 
@@ -77,11 +84,17 @@ main = execParser opts >>= run
            
 
 run :: PdfToText -> IO ()
-run (PdfToText (Just PdfMinerXml) outputMethod inputFile) = do
-  glyphs <- B.readFile inputFile >>= parseXml
-  extract outputMethod glyphs
-  return ()
-run (PdfToText _ outputMethod inputFile) = do
+run (PdfToText (Just PdfMinerXml) outputMethod pages inputFile) = do
+  case (R.parseRanges pages)::(Either R.ParseError [R.Range Int]) of
+    Left err -> do
+      print err
+      return ()
+    Right range -> do
+      --print range
+      glyphs <- B.readFile inputFile >>= parseXml
+      extract outputMethod glyphs
+      return ()
+run (PdfToText _ outputMethod pages inputFile) = do
   withBinaryFile inputFile ReadMode $ \handle -> do
     pdf <- P.pdfWithHandle handle
     doc <- P.document pdf
