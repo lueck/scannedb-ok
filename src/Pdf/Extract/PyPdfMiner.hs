@@ -19,6 +19,7 @@ import Control.Applicative
 import qualified Data.Text as T 
 import qualified Data.Text.Encoding as T
 import Text.Read (readMaybe)
+import qualified Data.Range.Range as R
 
 import qualified Pdf.Extract.Glyph as Gl
 
@@ -41,16 +42,18 @@ instance Gl.Glyph PdfMinerGlyph where
 
 data PdfMinerState = PdfMinerState
   { _tag :: Maybe ByteString
+  , _toBeExtracted :: Bool
   , _bbox :: Maybe ByteString
   , _font :: Maybe ByteString
   , _code :: Maybe ByteString
   , _text :: Maybe T.Text
   , _glyphs :: [PdfMinerGlyph]
+  , _pages :: [[PdfMinerGlyph]]
   } deriving (Eq, Show)
 
 makeLenses ''PdfMinerState
 
-initState = PdfMinerState Nothing Nothing Nothing Nothing Nothing []
+initState = PdfMinerState Nothing False Nothing Nothing Nothing Nothing [] []
 
 
 mkGlyph :: PdfMinerState -> [PdfMinerGlyph]
@@ -61,12 +64,12 @@ mkGlyph s = maybeToList $ PdfMinerGlyph
 
 -- | Parse xml rendered from pdfminers. We use the fast sax parser
 -- `process` from `Xeno.SAX` package.
-parseXml :: ByteString -> IO ([PdfMinerGlyph])
-parseXml bs = do
+parseXml :: [R.Range Int] -> ByteString -> IO ([[PdfMinerGlyph]])
+parseXml ranges bs = do
   (_, s) <- runStateT
-    (process open attr doNothing txt close doNothing bs)
+    (process open (attr ranges) doNothing txt close doNothing bs)
     initState
-  return $ s^.glyphs
+  return $ s^.pages -- [s^.glyphs]
 
 open :: ByteString -> StateT PdfMinerState IO ()
 open tg = do
@@ -77,23 +80,41 @@ open tg = do
 close :: ByteString -> StateT PdfMinerState IO ()
 close tg = do
   s <- get
-  when ((tg == "text") && (s^.tag == Just tg) && (isJust $ s^.bbox)) $
-    put $ s
-    & glyphs %~ (++ (mkGlyph s))
-    & tag .~ Nothing
-    & bbox .~ Nothing
-    & font .~ Nothing
-    & text .~ Nothing
-    & code .~ Nothing
-  return ()
+  case tg of
+    "text" -> do
+      when ((s^.tag == Just tg) && (isJust $ s^.bbox)) $
+        put $ s
+        & glyphs %~ (++ (mkGlyph s))
+        & tag .~ Nothing
+        & bbox .~ Nothing
+        & font .~ Nothing
+        & text .~ Nothing
+        & code .~ Nothing
+      return ()
+    "page" -> do
+      when (s^.toBeExtracted) $
+        put $ s
+        & pages %~ (++[s^.glyphs])
+        & glyphs .~ []
+        & toBeExtracted .~ False
+      return ()
+    _ -> return ()
 
-attr :: ByteString -> ByteString -> StateT PdfMinerState IO ()
-attr ky val = do
+attr :: [R.Range Int] -> ByteString -> ByteString -> StateT PdfMinerState IO ()
+attr ranges ky val = do
   s <- get
   case ky of
+    "id" -> do
+      when ((s^.tag == Just "page") && (inPageRange $ readMaybe $ C.unpack val)) $
+        put $ s & toBeExtracted .~ True
+      return ()
     "bbox" -> do { put $ s & bbox .~ Just val; return ()}
     "font" -> do { put $ s & font .~ Just val; return ()}
     _ -> return ()
+  where
+    inPageRange Nothing = False
+    inPageRange (Just i) = R.inRanges ranges i
+
 
 txt :: ByteString -> StateT PdfMinerState IO ()
 txt t = do

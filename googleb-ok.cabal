@@ -46,6 +46,7 @@ library
               , bytestring
               , lens
               , mtl
+              , range
   default-language: Haskell2010
 
 executable googleb-ok

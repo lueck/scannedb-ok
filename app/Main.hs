@@ -91,8 +91,8 @@ run (PdfToText (Just PdfMinerXml) outputMethod pages inputFile) = do
       print err
       return ()
     Right ranges -> do
-      glyphs <- B.readFile inputFile >>= parseXml
-      extract outputMethod glyphs
+      glyphs <- B.readFile inputFile >>= parseXml ranges
+      mapM (extract outputMethod) glyphs
       return ()
 run (PdfToText _ outputMethod pages inputFile) = do
   case (R.parseRanges pages)::(Either R.ParseError [R.Range Int]) of
