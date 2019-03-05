@@ -17,13 +17,16 @@ import Data.Maybe
 import qualified Data.ByteString as B
 import qualified Data.Range.Parser as R
 import qualified Data.Range.Range as R
+import qualified Data.Csv as Csv
+import qualified Data.ByteString.Lazy.Char8 as C
+
 
 import Pdf.Extract.Lines
 import Pdf.Extract.Linearize
 import Pdf.Extract.PdfToolBox
 import Pdf.Extract.PyPdfMiner
 import Pdf.Extract.Glyph
-
+import Pdf.Extract.Spacing
 
 data PdfToText = PdfToText
   { inputMethod :: Maybe InputMethod
@@ -32,7 +35,7 @@ data PdfToText = PdfToText
   , inputFile :: String
   }
 
-data OutputMethod = Text | NoSpaces | Info | Glyphs
+data OutputMethod = Text | NoSpaces | Info | Glyphs | Spacing'
 
 data InputMethod = PdfInput | PdfMinerXml
 
@@ -63,6 +66,11 @@ pdfToText_ = PdfToText
                    <> long "statistics"
                    <> help "Show statistics about the text."))
                  <|>
+                 (flag' Spacing'
+                  (short 's'
+                   <> long "spacings"
+                   <> help "Extract inter-glyph distances for statistical analysis. This generates CSV output."))
+                 <|>
                  (flag' Glyphs
                   (short 'g'
                    <> long "glyphs"
@@ -72,7 +80,8 @@ pdfToText_ = PdfToText
                  <> help "Ranges of pages to extract. Defaults to all. Examples: 3-9 or -10 or 2,4,6,20-30,40- or \"*\" for all. Except for all do not put into quotes."
                  <> value "*"
                  <> metavar "PAGES")
-  <*> argument str (metavar "INPUTFILE")
+  <*> argument str (metavar "INPUTFILE"
+                    <> help "Path to the input file.")
 
 
 main :: IO ()
@@ -139,6 +148,13 @@ extract (Just Info) glyphs = do
 extract (Just NoSpaces) glyphs = do
   let lines = findLinesWindow 34 5 2 True glyphs
   mapM (T.putStrLn . (linearizeLine (T.concat . mapMaybe text))) lines
+  return ()
+extract (Just Spacing') glyphs = do
+  let lines = findLinesWindow 34 5 2 True glyphs
+      csvOpts = Csv.defaultEncodeOptions {
+        Csv.encDelimiter = fromIntegral $ ord ','
+        }
+  mapM (C.putStr . (Csv.encodeWith csvOpts) . spacingsInLine) lines
   return ()
 extract _ glyphs = do
   let lines = findLinesWindow 34 5 2 True glyphs

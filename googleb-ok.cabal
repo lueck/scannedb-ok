@@ -5,14 +5,24 @@
 -- hash: 684051581b179129958c827fd8b046d81566c108bf69101df5054046f6266268
 
 name:           googleb-ok
-version:        0.1.0.0
-description:    Text extraction from PDF, specially Google Books. Please see the README on GitHub at <https://github.com/lueck/googleb-ok#readme>
+version:        0.0.1.0
+synopsis:       Text extraction from PDF, specially Google Books
+description:
+   googleb-ok extracts text from a PDF and was written with
+   Google Books in mind. Google's optical
+   character recognition has become very good over the last years, even
+   for works printed in German *black letter*, aka *Gothic letter*
+   (Frakturschrift). But as long as there's is no good text extraction
+   tool that can deal with the slight variances of glyph line up of
+   scanned books, this valuable resource remains unused by text mining
+   and NLP folks. That's where googleb-ok come into the game.
 homepage:       https://github.com/githubuser/googleb-ok#readme
 bug-reports:    https://github.com/githubuser/googleb-ok/issues
 author:         Christian Lück
 maintainer:     christian.lueck@ruhr-uni-bochum.de
 copyright:      2019 Christian Lück
-license:        GPLv3
+license:        BSD3
+x-license:      BSD-3-Clause OR Apache-2.0
 license-file:   LICENSE
 build-type:     Simple
 cabal-version:  >= 1.10
@@ -31,6 +41,7 @@ library
                 , Pdf.Extract.Lines
                 , Pdf.Extract.Linearize
                 , Pdf.Extract.PyPdfMiner
+                , Pdf.Extract.Spacing
   other-modules:
                 Paths_googleb_ok
   hs-source-dirs:
@@ -47,6 +58,7 @@ library
               , lens
               , mtl
               , range
+              , cassava
   default-language: Haskell2010
 
 executable googleb-ok
@@ -71,6 +83,7 @@ executable googleb-ok
               , mtl
               , optparse-applicative
               , range
+              , cassava
   default-language: Haskell2010
 
 test-suite googleb-ok-test
