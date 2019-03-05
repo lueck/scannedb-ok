@@ -36,6 +36,7 @@ data OutputMethod = Text | NoSpaces | Info | Glyphs
 
 data InputMethod = PdfInput | PdfMinerXml
 
+-- | A parser for the command line arguments.
 pdfToText_ :: Parser PdfToText
 pdfToText_ = PdfToText
   <$> optional ((flag' PdfInput
@@ -81,16 +82,15 @@ main = execParser opts >>= run
             <> progDesc "googleb-ok extracts the text from a PDF and was written to work for scanned books from books.google.com. There are options for stripping of page headers and footers in order to make the pure text ready for text mining and NLP."
             <> header "googleb-ok - extract text from a PDF, even scanned books." )
 
-           
 
+-- | Run the extractor with the parsed command line arguments.
 run :: PdfToText -> IO ()
 run (PdfToText (Just PdfMinerXml) outputMethod pages inputFile) = do
   case (R.parseRanges pages)::(Either R.ParseError [R.Range Int]) of
     Left err -> do
       print err
       return ()
-    Right range -> do
-      --print range
+    Right ranges -> do
       glyphs <- B.readFile inputFile >>= parseXml
       extract outputMethod glyphs
       return ()
@@ -106,10 +106,11 @@ run (PdfToText _ outputMethod pages inputFile) = do
         catalog <- P.documentCatalog doc
         rootNode <- P.catalogPageNode catalog
         count <- P.pageNodeNKids rootNode
-        let pages = filter (R.inRanges ranges) [0..count]
+        let pages = map (\n -> n - 1) $ filter (R.inRanges ranges) [1 .. count]
         mapM (extractPdfPage outputMethod rootNode) pages
         return ()
 
+-- | extract a single page using the pdf-toolbox
 extractPdfPage :: Maybe OutputMethod -> P.PageNode -> Int -> IO ()
 extractPdfPage outputMethod rootNode n = do
   page <- P.pageNodePageByNum rootNode n
