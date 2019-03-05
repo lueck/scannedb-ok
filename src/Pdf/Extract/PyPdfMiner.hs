@@ -9,23 +9,35 @@ module Pdf.Extract.PyPdfMiner
 
 
 import Xeno.SAX
-import System.IO
-import System.Environment
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
-import Control.Monad
+import qualified Data.ByteString.Char8 as C
 import Control.Monad.State
 import Control.Lens
 import Data.Maybe
 import Control.Applicative
 import qualified Data.Text as T 
 import qualified Data.Text.Encoding as T
+import Text.Read (readMaybe)
+
+import qualified Pdf.Extract.Glyph as Gl
+
 
 data PdfMinerGlyph = PdfMinerGlyph
   { _pmg_text :: Maybe T.Text
-  , _pmg_bbox :: ByteString
+  , _pmg_bbox :: Gl.BBox
   , _pmg_font :: ByteString
   } deriving (Eq, Show)
+
+
+instance Gl.Glyph PdfMinerGlyph where
+  text = _pmg_text
+  bbox = _pmg_bbox
+  code = const 0
+  font = Just . C.unpack . _pmg_font
+  xLeft = Gl._bbox_xBottomLeft . _pmg_bbox
+  yBottom = Gl._bbox_yBottomLeft . _pmg_bbox
+
 
 data PdfMinerState = PdfMinerState
   { _tag :: Maybe ByteString
@@ -42,7 +54,10 @@ initState = PdfMinerState Nothing Nothing Nothing Nothing Nothing []
 
 
 mkGlyph :: PdfMinerState -> [PdfMinerGlyph]
-mkGlyph s = maybeToList $ PdfMinerGlyph <$> Just (s^.text) <*> (s^.bbox) <*> (s^.font)
+mkGlyph s = maybeToList $ PdfMinerGlyph
+  <$> Just (s^.text)
+  <*> (join $ fmap readBbox $ s^.bbox)
+  <*> (s^.font)
 
 -- | Parse xml rendered from pdfminers. We use the fast sax parser
 -- `process` from `Xeno.SAX` package.
@@ -85,6 +100,13 @@ txt t = do
   s <- get
   put $ s & text .~ (rightToMaybe $ T.decodeUtf8' t)
   return ()
+
+readBbox :: ByteString -> Maybe Gl.BBox
+readBbox b = Gl.BBox <$> readCoord 0 <*> readCoord 1 <*> readCoord 2 <*> readCoord 3
+  where
+    bs = C.split ',' b
+    -- FIXME: Howto do conversion to Double directly from ByteString?
+    readCoord n = join $ fmap (readMaybe . C.unpack) (bs ^? element n)
 
 doNothing :: Monad m => ByteString -> m ()
 doNothing _ = return ()
