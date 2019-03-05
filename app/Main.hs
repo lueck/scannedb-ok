@@ -67,9 +67,9 @@ pdfToText_ = PdfToText
                   (short 'g'
                    <> long "glyphs"
                    <> help "Show the information about the glyphs found in the document.")))
-  <*> strOption (short 'p'
+  <*> strOption (short 'r'
                  <> long "pages"
-                 <> help "Ranges of pages to extract. Defaults to all."
+                 <> help "Ranges of pages to extract. Defaults to all. Examples: 3-9 or -10 or 2,4,6,20-30,40- or \"*\" for all. Except for all do not put into quotes."
                  <> value "*"
                  <> metavar "PAGES")
   <*> argument str (metavar "INPUTFILE")
