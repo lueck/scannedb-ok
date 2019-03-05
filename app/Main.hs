@@ -95,20 +95,27 @@ run (PdfToText (Just PdfMinerXml) outputMethod pages inputFile) = do
       extract outputMethod glyphs
       return ()
 run (PdfToText _ outputMethod pages inputFile) = do
-  withBinaryFile inputFile ReadMode $ \handle -> do
-    pdf <- P.pdfWithHandle handle
-    doc <- P.document pdf
-    catalog <- P.documentCatalog doc
-    rootNode <- P.catalogPageNode catalog
-    count <- P.pageNodeNKids rootNode
-    --print count
-    -- the first page of the document
-    page <- P.pageNodePageByNum rootNode 204
-    -- txt <- P.pageExtractText page
-    -- print txt
-    spans <- P.pageExtractGlyphs page
-    extract outputMethod $ concatMap P.spGlyphs spans
-    return ()
+  case (R.parseRanges pages)::(Either R.ParseError [R.Range Int]) of
+    Left err -> do
+      print err
+      return ()
+    Right ranges -> do
+      withBinaryFile inputFile ReadMode $ \handle -> do
+        pdf <- P.pdfWithHandle handle
+        doc <- P.document pdf
+        catalog <- P.documentCatalog doc
+        rootNode <- P.catalogPageNode catalog
+        count <- P.pageNodeNKids rootNode
+        let pages = filter (R.inRanges ranges) [0..count]
+        mapM (extractPdfPage outputMethod rootNode) pages
+        return ()
+
+extractPdfPage :: Maybe OutputMethod -> P.PageNode -> Int -> IO ()
+extractPdfPage outputMethod rootNode n = do
+  page <- P.pageNodePageByNum rootNode n
+  spans <- P.pageExtractGlyphs page
+  extract outputMethod $ concatMap P.spGlyphs spans
+  return ()
 
 
 extract :: (Show g, Eq g, Glyph g) => Maybe OutputMethod -> [g] -> IO ()
