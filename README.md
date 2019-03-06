@@ -36,25 +36,28 @@ several deficiencies.
 
 ## Installation
 
-For building and installing [`stack`](https://docs.haskellstack.org/en/stable/README/#quick-start-guide),
+For building and installing [`stack`](https://docs.haskellstack.org),
 the haskell build tool, is required.
 
 1. Clone this repository
 2. Clone [`pdf-toolbox`](https://github.com/Yuras/pdf-toolbox) so
-  that it lives in the same directory as `googleb-ok`.
+   that it lives in the same directory as `googleb-ok`.
 3. `cd` into the `googleb-ok` directory and run
 
 		stack setup
-		stack install --only-dependencies
 		stack build
 		stack install # optional
 
-If you want to test before installation, then leave the last step and
-try the commandline tool from the `googleb-ok` directory using
+The build command will take a while. The first 2 commands will not
+install anything outside the `googleb-ok` folder. If you want to test
+the app before the installation, then leave out the last step and try
+the commandline tool from the `googleb-ok` directory using
 
 	stack exec -- googleb-ok --help
 
-`1.8` has shown to be a good choice for the fixed spacing factor.
+This will show you the options and arguments which you can chose to
+optimize the extraction result. E.g. `1.3` has shown to be a good
+choice for the fixed spacing factor. See below for an example.
 
 
 ## TODO/Heuristics
