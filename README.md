@@ -74,3 +74,45 @@ try the commandline tool from the `googleb-ok` directory using
 
 ### Syllable division
 - Search for a unknown part of bigram overlapping a line break.
+
+
+## Example
+
+A page from Georg Friedrich Wilhelm Hegel's *Vorlesungen über die
+Ästhetic*, edited by Hotho in 1835:
+
+	$ googleb-ok -x -f 1.3 -l 34 -r 1 test/Heg1835a_p205-p207.xml
+	178 Erſter Theil. Idee des Kunſtſchönen.
+	hören, laſſen wir wie es iſt. Die Organe des Geruchs und Ge
+	ſchmacks dagegen gehören ſchon dem Beginne des praktiſchen Ver
+	hältniſſes an. Denn zu riechen iſt nur dasjenige, was ſchon im
+	Sichverzehren begriffen iſt, und ſchmecken können wir nur, indem
+	wir zerſtören. Nun haben wir zwar nur eine Naſe, aber ſie iſt
+	zweigetheilt und durchaus in ihren Hälften regelmäßig gebildet.
+	Aehnlich iſt es mit den Lippen, Zähnen u. ſ. f. Durchaus regel
+	mäßig aber in ihrer Stellung, Geſtalt u. ſ. f. ſind Augen und
+	Ohren, und die Glieder für die Ortsverändrung und die Be
+	mächtigung und praktiſche Verändrung der äußeren Objekte,
+	Beine und Arme.
+	Auch im Organiſchen alſo hat die Regelmäßigkeit ihr be
+	griffsgemäßes Recht, aber nur bei den Gliedern, welche die Werk
+	zeuge für den unmittelbaren Bezug auf die Außenwelt abgeben,
+	und nicht den Bezug des Organismus auf ſich ſelbſt als in ſich
+	zurückkehrende Subjektivität des Lebens bethätigen.
+	Dieß wären die Hauptbeſtimmungen der regelmäßigen und
+	ſymmetriſchen Formen und ihrer geſtaltenden Herrſchaft in den
+	Naturerſcheinungen.
+	Näher nun aber von dieſer abſtrakteren Form iſt
+	b) die Geſetzmäßigkeit
+	zu unterſcheiden, inſofern ſie ſchon auf einer höheren Stufe ſteht,
+	und den Uebergang zu der Freiheit des Lebendigen, ſowohl des
+	natürlichen als auch des geiſtigen, ausmacht. Für ſich jedoch be
+	trachtet iſt die Geſetzmäßigkeit zwar noch nicht die ſubjektive to
+	tale Einheit und Freiheit ſelber, doch iſt ſie bereits eine Tota
+	lität weſentlicher Unterſchiede, welche nicht nur als Unter
+	ſchiede und Gegenſätze ſich hervorkehren, ſondern in ihrer To
+	talität Einheit und Zuſammenhang zeigen. Solche geſetz
+	mäßige Einheit und ihre Herrſchaft, obſchon ſie noch im Quan
+	titativen ſich geltend macht, iſt nicht mehr auf an ſich ſelbſt äu
+	ßerliche und nur zählbare Unterſchiede der bloßen Größe zurück
+	zuführen, ſondern läßt ſchon ein qualitatives Verhalten der Y
