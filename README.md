@@ -36,6 +36,9 @@ several deficiencies.
 
 ## Installation
 
+For building and installing [`stack`](https://docs.haskellstack.org/en/stable/README/#quick-start-guide),
+the haskell build tool, is required.
+
 - 1. Clone this repository
 - 2. Clone [`pdf-toolbox`](https://github.com/Yuras/pdf-toolbox) so
   that it lives in the same directory as `googleb-ok`.
