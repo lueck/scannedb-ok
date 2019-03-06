@@ -16,7 +16,7 @@ much better, but suffers from problems with the inexact lineup of
 Glyphs. `googleb-ok` wants to overcome these problems. It's not
 intended for the extraction of tabulars, but only of a single text
 column. It wouldn't be too hard to extend it to extract two or more
-columns.
+columns, though.
 
 `googleb-ok` is written in [Haskell](https://www.haskell.org/). It is
 a library and a commandline tool. It was written as a generic tool
