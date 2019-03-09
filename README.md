@@ -85,7 +85,14 @@ choice for the fixed spacing factor. See below for an example.
 ## Example
 
 A page from Georg Friedrich Wilhelm Hegel's *Vorlesungen über die
-Ästhetic*, edited by Hotho in 1835:
+Ästhetic*, edited by Hotho in 1835,
+[scanned by Google](https://books.google.de/books?id=Fss9AQAAMAAJ&hl=de):
+
+![Georg Friedrich Wilhelm Hegel: Vorlesungen über die Ästhetik. Ed. by D.H.G. Hotho, Berlin 1835, vol. 1, p. 205.](img/Heg1835a_p205.jpg)
+
+
+That's the output of `googleb-ok`:
+
 
 	$ googleb-ok -x -f 1.3 -l 34 -r 1 test/Heg1835a_p205-p207.xml
 	178 Erſter Theil. Idee des Kunſtſchönen.
@@ -122,3 +129,5 @@ A page from Georg Friedrich Wilhelm Hegel's *Vorlesungen über die
 	titativen ſich geltend macht, iſt nicht mehr auf an ſich ſelbſt äu
 	ßerliche und nur zählbare Unterſchiede der bloßen Größe zurück
 	zuführen, ſondern läßt ſchon ein qualitatives Verhalten der Y
+
+
