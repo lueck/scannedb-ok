@@ -6,7 +6,7 @@ import System.IO
 import Options.Applicative
 import Data.Monoid ((<>))
 import Data.Char
-
+import Data.List
 import System.Environment
 import qualified Pdf.Document as P
 import qualified Pdf.Content.Processor as P
@@ -166,7 +166,7 @@ extract (Just Spacing') lines' spacing' glyphs = do
       csvOpts = Csv.defaultEncodeOptions {
         Csv.encDelimiter = fromIntegral $ ord ','
         }
-  mapM (C.putStr . (Csv.encodeWith csvOpts) . spacingsInLine) lines
+  mapM (C.putStr . (Csv.encodeWith csvOpts) . spacingsInLine . (sortOn xLeft)) lines
   return ()
 extract _ lines' spacing' glyphs = do
   let lines = findLinesWindow lines' 5 2 True glyphs

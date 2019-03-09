@@ -10,18 +10,21 @@ import Pdf.Extract.Glyph
 import qualified Pdf.Content.Processor as P
 import Pdf.Content.Transform
 
+-- | In the pdf-toolbox, the naming is buggy: topLeft is really the
+-- bottom left angle of the bbox and bottomRight is really top right
+-- angle of the bbox.
 instance Glyph P.Glyph where
   text = P.glyphText
-  bbox g = BBox (x topLeft) (y topLeft) (x bottomRight) (y bottomRight)
+  bbox g = BBox (x bottomLeft) (y bottomLeft) (x topRight) (y topRight)
     where
-      topLeft = P.glyphTopLeft g
-      bottomRight = P.glyphBottomRight g
+      bottomLeft = P.glyphTopLeft g
+      topRight = P.glyphBottomRight g
   font _ = Nothing
   code = P.glyphCode
   xLeft = x . P.glyphTopLeft
-  yBottom = y . P.glyphBottomRight
-  size g = abs((y $ P.glyphTopLeft g) - (y $ P.glyphBottomRight g))
-  width g = abs((x $ P.glyphTopLeft g) - (x $ P.glyphBottomRight g))
+  yBottom = y . P.glyphTopLeft
+  size g = (y $ P.glyphBottomRight g) - (y $ P.glyphTopLeft g)
+  width g = (x $ P.glyphBottomRight g) - (x $ P.glyphTopLeft g)
 
 instance Eq P.Glyph where
   (P.Glyph aCode (Vector atlx atly) (Vector ablx ably) at) ==
