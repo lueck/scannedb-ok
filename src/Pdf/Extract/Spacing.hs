@@ -18,7 +18,10 @@ data Spacing = Spacing
   { _sp_char :: T.Text
   , _sp_next :: T.Text
   , _sp_dist :: Double
+  , _sp_width :: Double
   , _sp_size :: Double
+  , _sp_left :: Double
+  , _sp_bottom :: Double        -- ^ For mining for lines on a single page
   , _sp_font :: T.Text
   } deriving (Eq, Show, Generic)
 
@@ -42,6 +45,9 @@ spacingsInLine (g1:g2:gs) =
     <$> text g1
     <*> text g2
     <*> Just ((xLeft g2) - (xLeft g1))
+    <*> (Just $ width g1)
     <*> (Just $ size g1)
+    <*> (Just $ xLeft g1)
+    <*> (Just $ yBottom g1)
     <*> (Just $ T.pack $ fromMaybe "unkown" $ font g1))
   ++ spacingsInLine (g2:gs)

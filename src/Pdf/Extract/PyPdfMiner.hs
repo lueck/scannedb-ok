@@ -95,8 +95,9 @@ close tg = do
       when (s^.toBeExtracted) $
         put $ s
         & pages %~ (++[s^.glyphs])
-        & glyphs .~ []
         & toBeExtracted .~ False
+      s2 <- get
+      put $ s2 & glyphs .~ []
       return ()
     _ -> return ()
 
