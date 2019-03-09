@@ -69,7 +69,8 @@ findLinesWindow linesCount stepsPerLine threshold drop glyphs =
 
 
 glyphsTop :: Glyph g => [g] -> Double
-glyphsTop = foldl1 max . map yBottom
+glyphsTop = foldl max 0 . map yBottom
 
 glyphsBottom :: Glyph g => [g] -> Double
-glyphsBottom = foldl1 min . map yBottom
+glyphsBottom [] = 0
+glyphsBottom gs = foldl1 min $ map yBottom gs
