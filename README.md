@@ -62,7 +62,7 @@ choice for the fixed spacing factor. See below for an example.
 
 ## TODO/Heuristics
 ### Spacing
-- k-means clustering of inter-glyph spacing per character (I'm working
+- clustering of inter-glyph spacing per character (I'm working
   on that right now.)
 - space before capital letter
 - space after comma
