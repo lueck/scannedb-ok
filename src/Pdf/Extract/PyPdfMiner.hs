@@ -4,7 +4,7 @@ module Pdf.Extract.PyPdfMiner
   , PdfMinerGlyph(..)
   ) where
 
--- | Parse the XML representation of glyphs rendered from pdfminer
+-- | Parse the XML representation of glyphs rendered from PDFMiner
 -- with @pdf2txt.py -t xml ...@.
 
 
@@ -76,28 +76,35 @@ open tg = do
   s <- get
   put $ s & tag .~ (Just tg)
   return ()
+{-# INLINE open #-}
 
 close :: ByteString -> StateT PdfMinerState IO ()
 close tg = do
   s <- get
   case tg of
     "text" -> do
-      when ((s^.tag == Just tg) && (isJust $ s^.bbox)) $
-        put $ s
-        & glyphs %~ (++ (mkGlyph s))
-        & tag .~ Nothing
-        & bbox .~ Nothing
-        & font .~ Nothing
-        & text .~ Nothing
-        & code .~ Nothing
+      if ((s^.toBeExtracted) && (s^.tag == Just "text") && (isJust $ s^.bbox))
+        then put $ s
+             & glyphs %~ (++ (mkGlyph s))
+             & tag .~ Nothing
+             & bbox .~ Nothing
+             & font .~ Nothing
+             & text .~ Nothing
+             & code .~ Nothing
+        else put $ s
+             & tag .~ Nothing
+             & bbox .~ Nothing
+             & font .~ Nothing
+             & text .~ Nothing
+             & code .~ Nothing
       return ()
     "page" -> do
-      when (s^.toBeExtracted) $
-        put $ s
-        & pages %~ (++[s^.glyphs])
-        & toBeExtracted .~ False
-      s2 <- get
-      put $ s2 & glyphs .~ []
+      if (s^.toBeExtracted)
+        then put $ s
+             & pages %~ (++[s^.glyphs])
+             & glyphs .~ []
+             & toBeExtracted .~ False
+        else put $ s & glyphs .~ []
       return ()
     _ -> return ()
 
@@ -115,13 +122,14 @@ attr ranges ky val = do
   where
     inPageRange Nothing = False
     inPageRange (Just i) = R.inRanges ranges i
-
+{-# INLINE attr #-}
 
 txt :: ByteString -> StateT PdfMinerState IO ()
 txt t = do
   s <- get
   put $ s & text .~ (rightToMaybe $ T.decodeUtf8' t)
   return ()
+{-# INLINE txt #-}
 
 readBbox :: ByteString -> Maybe Gl.BBox
 readBbox b = Gl.BBox <$> readCoord 0 <*> readCoord 1 <*> readCoord 2 <*> readCoord 3
