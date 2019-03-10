@@ -36,7 +36,8 @@ instance Csv.ToRecord Spacing
 
 -- * Getting spacing information
 
--- | Get the inter-glyph spacings of a line of glyphs.
+-- | Get the inter-glyph spacings of a line of glyphs. The line is
+-- required to be sorted by xLeft value of the glyphs.
 spacingsInLine :: Glyph g => [g] -> [Spacing]
 spacingsInLine [] = []
 spacingsInLine (_:[]) = []
