@@ -191,6 +191,7 @@ extract _ lines' spacing' headlines' footlines' glyphs = do
   let lines = findLinesWindow lines' 5 2 True glyphs
   mapM (T.putStrLn . (linearizeLine (spacingFactor spacing'))) $
     (drop headlines') $ dropFoot footlines' lines
+  T.putStr(T.singleton $ chr 12) -- add form feed at end of page
   return ()
 
 dropHead :: Glyph g => Int -> [[g]] -> [[g]]
