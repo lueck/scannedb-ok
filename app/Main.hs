@@ -34,6 +34,8 @@ data PdfToText = PdfToText
   , pages :: String -- Maybe (Range Int)
   , linesPerPage :: Int
   , fixedSpacingFactor :: Double
+  , headlines :: Int
+  , footlines :: Int
   , inputFile :: String
   }
 
@@ -92,7 +94,17 @@ pdfToText_ = PdfToText
                    <> help "A fixed spacing factor. If the distance between two glyphs exceeds the product of the first glyphs width and this factor, a space is inserted. Defaults to 1.7, but for Gothic letter values down to 1 are promising, too."
                    <> value 1.7
                    <> metavar "SPACING")
-  <*> argument str (metavar "INPUTFILE"
+  <*> option auto (short 'H'
+                   <> long "headlines"
+                   <> help "Count of lines in the page header to be dropped. Defaults to 0."
+                   <> value 0
+                   <> metavar "HEADLINES")
+  <*> option auto (short 'F'
+                   <> long "footlines"
+                   <> help "Count of lines in the page footer to be dropped. Defaults to 0."
+                   <> value 0
+                   <> metavar "FOOTLINES")
+  <*> argument str (metavar "INFILE"
                     <> help "Path to the input file.")
 
 
@@ -106,16 +118,16 @@ main = execParser opts >>= run
 
 -- | Run the extractor with the parsed command line arguments.
 run :: PdfToText -> IO ()
-run (PdfToText (Just PdfMinerXml) outputMethod pages lines' spacing' inputFile) = do
+run (PdfToText (Just PdfMinerXml) outputMethod pages lines' spacing' headlines' footlines' inputFile) = do
   case (R.parseRanges pages)::(Either R.ParseError [R.Range Int]) of
     Left err -> do
       print err
       return ()
     Right ranges -> do
       glyphs <- B.readFile inputFile >>= parseXml ranges
-      mapM (extract outputMethod lines' spacing') glyphs
+      mapM (extract outputMethod lines' spacing' headlines' footlines') glyphs
       return ()
-run (PdfToText _ outputMethod pages lines' spacing' inputFile) = do
+run (PdfToText _ outputMethod pages lines' spacing' headlines' footlines' inputFile) = do
   case (R.parseRanges pages)::(Either R.ParseError [R.Range Int]) of
     Left err -> do
       print err
@@ -128,23 +140,30 @@ run (PdfToText _ outputMethod pages lines' spacing' inputFile) = do
         rootNode <- P.catalogPageNode catalog
         count <- P.pageNodeNKids rootNode
         let pages = map (\n -> n - 1) $ filter (R.inRanges ranges) [1 .. count]
-        mapM (extractPdfPage outputMethod lines' spacing' rootNode) pages
+        mapM (extractPdfPage outputMethod lines' spacing' headlines' footlines' rootNode) pages
         return ()
 
 -- | extract a single page using the pdf-toolbox
-extractPdfPage :: Maybe OutputMethod -> Int -> Double -> P.PageNode -> Int -> IO ()
-extractPdfPage outputMethod lines' spacing' rootNode n = do
+extractPdfPage :: Maybe OutputMethod -> Int -> Double -> Int -> Int -> P.PageNode -> Int -> IO ()
+extractPdfPage outputMethod lines' spacing' headlines' footlines' rootNode n = do
   page <- P.pageNodePageByNum rootNode n
   spans <- P.pageExtractGlyphs page
-  extract outputMethod lines' spacing' $ concatMap P.spGlyphs spans
+  extract outputMethod lines' spacing' headlines' footlines' $ concatMap P.spGlyphs spans
   return ()
 
 
-extract :: (Show g, Eq g, Glyph g) => Maybe OutputMethod -> Int -> Double -> [g] -> IO ()
-extract (Just Glyphs) lines' spacing' glyphs = do
+extract :: (Show g, Eq g, Glyph g) =>
+  Maybe OutputMethod ->         -- ^ output method
+  Int ->                        -- ^ count of lines
+  Double ->                     -- ^ spacing factor
+  Int ->                        -- ^ headlines
+  Int ->                        -- ^ footlines
+  [g] ->                        -- ^ glyphs on this page
+  IO ()
+extract (Just Glyphs) _ _ _ _ glyphs = do
   mapM (putStrLn . show) glyphs
   return ()
-extract (Just Info) lines' spacing' glyphs = do
+extract (Just Info) lines' _ _ _ glyphs = do
   putStr "#Glyphs: "
   print $ length glyphs
   putStr "Top: "
@@ -157,36 +176,27 @@ extract (Just Info) lines' spacing' glyphs = do
   putStr "Glyphs per Lines: "
   print $ map length lines
   return ()
-extract (Just NoSpaces) lines' spacing' glyphs = do
+extract (Just NoSpaces) lines' _ _ _ glyphs = do
   let lines = findLinesWindow lines' 5 2 True glyphs
   mapM (T.putStrLn . (linearizeLine (T.concat . mapMaybe text))) lines
   return ()
-extract (Just Spacing') lines' spacing' glyphs = do
+extract (Just Spacing') lines' _ _ _ glyphs = do
   let lines = findLinesWindow lines' 5 2 True glyphs
       csvOpts = Csv.defaultEncodeOptions {
         Csv.encDelimiter = fromIntegral $ ord ','
         }
   mapM (C.putStr . (Csv.encodeWith csvOpts) . spacingsInLine . (sortOn xLeft)) lines
   return ()
-extract _ lines' spacing' glyphs = do
+extract _ lines' spacing' headlines' footlines' glyphs = do
   let lines = findLinesWindow lines' 5 2 True glyphs
-  mapM (T.putStrLn . (linearizeLine (spacingFactor spacing'))) lines
+  mapM (T.putStrLn . (linearizeLine (spacingFactor spacing'))) $
+    (drop headlines') $ dropFoot footlines' lines
   return ()
 
+dropHead :: Glyph g => Int -> [[g]] -> [[g]]
+dropHead 0 = id
+dropHead n = drop n
 
-
--- import qualified Data.ByteString.Char8 as C
--- import qualified Data.Serialize as S
--- import Text.Read (readMaybe)
-
--- mainO :: IO ()
--- mainO = do
---   [file] <- getArgs
---   b <- B.readFile file
---   print b
---   print $ readBbox b
---   let bs = C.split ',' b
---   print $ length bs
---   let d :: Maybe Double = readMaybe $ C.unpack b
---   print d
---   return ()
+dropFoot :: Glyph g => Int -> [[g]] -> [[g]]
+dropFoot 0 = id
+dropFoot n = reverse . drop n . reverse
