@@ -123,7 +123,7 @@ pdfToText_ = PdfToText
         <*> option auto
         (long "par-indent"
           <> help "Minimal indentation of the first line of a new the paragraph. In portion of the page width."
-          <> value 0.05
+          <> value 0.2
           <> showDefault
           <> metavar "PARINDENT")
         <*> option auto
@@ -235,11 +235,17 @@ extract Spacing' lines' _ _ _ _ glyphs = do
   return ()
 extract _ lines' spacing' headlines' footlines' (ByIndent pi ci si sf) glyphs = do
   let lines = findLinesWindow lines' 5 2 True glyphs
-  mapM (T.putStrLn . (linearizeCategorizedLine (spacingFactor spacing'))) $
+  mapM (T.putStr . (linearizeCategorizedLine linOpts (spacingFactor spacing'))) $
     categorizeLines (byIndent pi ci si sf) $
     (drop headlines') $ dropFoot footlines' lines
   T.putStr(T.singleton $ chr 12) -- add form feed at end of page
   return ()
+  where
+    linOpts = LinOpts
+              Part3 Part3
+              Drop2 Drop2
+              "[[" "]]"
+              "\n\t" "\t\t\t\t\t" "\t\t\t"
 extract _ lines' spacing' headlines' footlines' AsDefault glyphs = do
   let lines = findLinesWindow lines' 5 2 True glyphs
   mapM (T.putStrLn . (linearizeLine (spacingFactor spacing'))) $
