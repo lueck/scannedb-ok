@@ -6,6 +6,7 @@ module Pdf.Extract.Linearize where
 import qualified Data.Text as T
 import Data.List
 import Data.Maybe
+import Control.Lens
 
 import Pdf.Extract.Glyph
 
@@ -97,9 +98,19 @@ byIndent parIndent custIndent sigIndent sigFill ((line, count, ldata):ls)
     (containsNumbers line) =
     -- TODO: foot skip exceeds baseline skip
     (Footline line):[] ++ byIndent parIndent custIndent sigIndent sigFill ls
-  | (_line_left ldata) > parIndent * (_line_pageWidth ldata) =
+  -- Paragraph:
+  --
+  -- If first glyph is more right than the average: Is it a secure
+  -- criterion for a new paragraph? -- Not if we don't have a
+  -- paragraph at all!
+  -- | (_line_left ldata) > parIndent * (_line_pageWidth ldata) =
+  | (_line_left ldata) >
+    (_line_avgLeft ldata + parIndent *
+     (fromMaybe avgWidth $ fmap size $ line ^? element 3)) =
     (FirstOfParagraph line):[] ++ byIndent parIndent custIndent sigIndent sigFill ls
   | otherwise = (DefaultLine line):[] ++ byIndent parIndent custIndent sigIndent sigFill ls
+  where
+    avgWidth = (_line_right ldata - _line_left ldata) / fromIntegral(_line_glyphsInLine ldata)
 
 
 -- | Returns True if the given line of glyphs contains at least one number.

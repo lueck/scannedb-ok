@@ -110,8 +110,8 @@ pdfToText_ = PdfToText
          <> help "Categorize lines by their indentation. (Default)")
         <*> option auto
         (long "par-indent"
-          <> help "Minimal indentation of the first line of a new the paragraph. In portion of the page width."
-          <> value 0.2
+          <> help "Minimal indentation of the first line of a new the paragraph. In portion of a quad or \'em\' (dt. Geviert)."
+          <> value 0.5
           <> showDefault
           <> metavar "PARINDENT")
         <*> option auto
