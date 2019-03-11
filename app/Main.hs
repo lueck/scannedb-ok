@@ -29,8 +29,8 @@ import Pdf.Extract.Glyph
 import Pdf.Extract.Spacing
 
 data PdfToText = PdfToText
-  { inputMethod :: Maybe InputMethod
-  , outputMethod :: Maybe OutputMethod
+  { inputMethod :: InputMethod
+  , outputMethod :: OutputMethod
   , pages :: String -- Maybe (Range Int)
   , linesPerPage :: Int
   , fixedSpacingFactor :: Double
@@ -58,35 +58,35 @@ data LineCategorizer
 -- | A parser for the command line arguments.
 pdfToText_ :: Parser PdfToText
 pdfToText_ = PdfToText
-  <$> optional ((flag' PdfInput
-                 (short 'p'
-                  <> long "pdf"
-                  <> help "PDF input data. (Default)"))
-                 <|>
-                 (flag' PdfMinerXml
-                  (short 'x'
-                   <> long "xml"
-                   <> help "XML input data. An XML representation of the glyphs of a PDF file, like produced with PDFMiner's \"pdf2txt.py -t xml ...\" command.")))
-  <*> optional ((flag' Text
-                 (short 't'
-                  <> long "text"
-                  <> help "Extract text. (Default)"))
-                 <|>
-                 (flag' NoSpaces
-                  (long "no-spaces"
-                   <> help "Extract text without spaces. (Yes, PDF really does not even know the concept of spaces..."))
-                 <|>
-                 (flag' Info
-                  (long "statistics"
-                   <> help "Show statistics about the text."))
-                 <|>
-                 (flag' Spacing'
-                  (long "spacing"
-                   <> help "Extract inter-glyph distances for statistical analysis. This generates CSV output."))
-                 <|>
-                 (flag' Glyphs
-                  (long "glyphs"
-                   <> help "Show the information about the glyphs found in the document.")))
+  <$> ((flag PdfInput PdfInput
+        (short 'p'
+         <> long "pdf"
+         <> help "PDF input data. (Default)"))
+       <|>
+       (flag' PdfMinerXml
+        (short 'x'
+         <> long "xml"
+         <> help "XML input data. An XML representation of the glyphs of a PDF file, like produced with PDFMiner's \"pdf2txt.py -t xml ...\" command.")))
+  <*> ((flag Text Text
+        (short 't'
+         <> long "text"
+         <> help "Extract text. (Default)"))
+       <|>
+       (flag' NoSpaces
+        (long "no-spaces"
+         <> help "Extract text without spaces. (PDF really does not even know the concept of spaces!)"))
+       <|>
+       (flag' Info
+        (long "statistics"
+         <> help "Show statistics about the text."))
+       <|>
+       (flag' Spacing'
+        (long "spacing"
+         <> help "Extract inter-glyph distances for statistical analysis. This generates CSV output."))
+       <|>
+       (flag' Glyphs
+        (long "glyphs"
+         <> help "Show the information about the glyphs found in the document.")))
   <*> strOption (short 'r'
                  <> long "pages"
                  <> help "Ranges of pages to extract. Defaults to all. Examples: 3-9 or -10 or 2,4,6,20-30,40- or \"*\" for all. Except for all do not put into quotes."
@@ -119,7 +119,7 @@ pdfToText_ = PdfToText
   <*> ((flag ByIndent ByIndent
         (short 'i'
          <> long "by-indent"
-         <> help "Categorize lines by their indentation.")
+         <> help "Categorize lines by their indentation. (Default)")
         <*> option auto
         (long "par-indent"
           <> help "Minimal indentation of the first line of a new the paragraph. In portion of the page width."
@@ -163,7 +163,7 @@ main = execParser opts >>= run
 
 -- | Run the extractor with the parsed command line arguments.
 run :: PdfToText -> IO ()
-run (PdfToText (Just PdfMinerXml) outputMethod pages lines' spacing' headlines' footlines' lineCategorizer' inputFile) = do
+run (PdfToText PdfMinerXml outputMethod pages lines' spacing' headlines' footlines' lineCategorizer' inputFile) = do
   case (R.parseRanges pages)::(Either R.ParseError [R.Range Int]) of
     Left err -> do
       print err
@@ -189,7 +189,7 @@ run (PdfToText _ outputMethod pages lines' spacing' headlines' footlines' lineCa
         return ()
 
 -- | extract a single page using the pdf-toolbox
-extractPdfPage :: Maybe OutputMethod -> Int -> Double -> Int -> Int -> LineCategorizer -> P.PageNode -> Int -> IO ()
+extractPdfPage :: OutputMethod -> Int -> Double -> Int -> Int -> LineCategorizer -> P.PageNode -> Int -> IO ()
 extractPdfPage outputMethod lines' spacing' headlines' footlines' lineCategorizer' rootNode n = do
   page <- P.pageNodePageByNum rootNode n
   spans <- P.pageExtractGlyphs page
@@ -198,7 +198,7 @@ extractPdfPage outputMethod lines' spacing' headlines' footlines' lineCategorize
 
 
 extract :: (Show g, Eq g, Glyph g) =>
-  Maybe OutputMethod ->         -- ^ output method
+  OutputMethod ->               -- ^ output method
   Int ->                        -- ^ count of lines
   Double ->                     -- ^ spacing factor
   Int ->                        -- ^ headlines
@@ -206,10 +206,10 @@ extract :: (Show g, Eq g, Glyph g) =>
   LineCategorizer ->            -- ^ config of line categorizer
   [g] ->                        -- ^ glyphs on this page
   IO ()
-extract (Just Glyphs) _ _ _ _ _ glyphs = do
+extract Glyphs _ _ _ _ _ glyphs = do
   mapM (putStrLn . show) glyphs
   return ()
-extract (Just Info) lines' _ _ _ _ glyphs = do
+extract Info lines' _ _ _ _ glyphs = do
   putStr "#Glyphs: "
   print $ length glyphs
   putStr "Top: "
@@ -222,11 +222,11 @@ extract (Just Info) lines' _ _ _ _ glyphs = do
   putStr "Glyphs per Lines: "
   print $ map length lines
   return ()
-extract (Just NoSpaces) lines' _ _ _ _ glyphs = do
+extract NoSpaces lines' _ _ _ _ glyphs = do
   let lines = findLinesWindow lines' 5 2 True glyphs
   mapM (T.putStrLn . (linearizeLine (T.concat . mapMaybe text))) lines
   return ()
-extract (Just Spacing') lines' _ _ _ _ glyphs = do
+extract Spacing' lines' _ _ _ _ glyphs = do
   let lines = findLinesWindow lines' 5 2 True glyphs
       csvOpts = Csv.defaultEncodeOptions {
         Csv.encDelimiter = fromIntegral $ ord ','
