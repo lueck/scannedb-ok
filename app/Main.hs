@@ -36,7 +36,7 @@ data PdfToText = PdfToText
   , fixedSpacingFactor :: Double
   , headlines :: Int
   , footlines :: Int
-  --, lineCategorizer :: LineCategorizer
+  , lineCategorizer :: LineCategorizer
   , inputFile :: String
   }
 
@@ -48,7 +48,9 @@ data InputMethod = PdfInput | PdfMinerXml
 
 data LineCategorizer
   = ByIndent
+    Double                      -- ^ paragraph indentation
     Double                      -- ^ indentation of custos
+    Double                      -- ^ indentation of sheet signature
     Double                      -- ^ line filling of sheet signature
   | AsDefault
 
@@ -71,23 +73,19 @@ pdfToText_ = PdfToText
                   <> help "Extract text. (Default)"))
                  <|>
                  (flag' NoSpaces
-                  (short 'S'
-                   <> long "no-spaces"
+                  (long "no-spaces"
                    <> help "Extract text without spaces. (Yes, PDF really does not even know the concept of spaces..."))
                  <|>
                  (flag' Info
-                  (short 'i'
-                   <> long "statistics"
+                  (long "statistics"
                    <> help "Show statistics about the text."))
                  <|>
                  (flag' Spacing'
-                  (short 's'
-                   <> long "spacings"
+                  (long "spacing"
                    <> help "Extract inter-glyph distances for statistical analysis. This generates CSV output."))
                  <|>
                  (flag' Glyphs
-                  (short 'g'
-                   <> long "glyphs"
+                  (long "glyphs"
                    <> help "Show the information about the glyphs found in the document.")))
   <*> strOption (short 'r'
                  <> long "pages"
@@ -96,41 +94,61 @@ pdfToText_ = PdfToText
                  <> metavar "PAGES")
   <*> option auto (short 'l'
                    <> long "lines-per-page"
-                   <> help "Lines per page. Lines of a vertically filled page. Defaults to 42. Needed be exact."
+                   <> help "Lines per page. Lines of a vertically filled page. This does not need to be exact."
                    <> value 42
+                   <> showDefault
                    <> metavar "LINES")
   <*> option auto (short 'f'
                    <> long "spacing-factor"
-                   <> help "A fixed spacing factor. If the distance between two glyphs exceeds the product of the first glyphs width and this factor, a space is inserted. Defaults to 1.7, but for Gothic letter values down to 1 are promising, too."
-                   <> value 1.7
+                   <> help "A fixed spacing factor. If the distance between two glyphs exceeds the product of the first glyphs width and this factor, a space is inserted. For Gothic letter scanned by google values down to 1 are promising."
+                   <> value 1.3
+                   <> showDefault
                    <> metavar "SPACING")
   <*> option auto (short 'H'
                    <> long "headlines"
-                   <> help "Count of lines in the page header to be dropped. Defaults to 0."
+                   <> help "Count of lines in the page header to be dropped."
                    <> value 0
+                   <> showDefault
                    <> metavar "HEADLINES")
   <*> option auto (short 'F'
                    <> long "footlines"
-                   <> help "Count of lines in the page footer to be dropped. Defaults to 0."
+                   <> help "Count of lines in the page footer to be dropped."
                    <> value 0
+                   <> showDefault
                    <> metavar "FOOTLINES")
-  -- <*> ((flag ByIndent ByIndent
-  --       (short 'i'
-  --        <> long "by-indent"
-  --        <> help "Categorize lines by their indentation.")
-  --       <*> option auto
-  --        (long "custos-indent"
-  --         <> help "Indentation of the custos (dt. Kustode), i.e. the first syllable of the next page in the bottom line."
-  --         <> metavar "CUSTOSINDENT")
-  --        <*> option auto
-  --        (long "sig-filling"
-  --        <> help "Maximal filling of the bottom line if it's a sheet signature."
-  --        <> metavar "SIGFILL"))
-  --      <|>
-  --      (flag' AsDefault
-  --       (short 'C'
-  --        <> long "no-categorization"
-  --        <> help "Do not categorize the lines at all.")))
+  <*> ((flag ByIndent ByIndent
+        (short 'i'
+         <> long "by-indent"
+         <> help "Categorize lines by their indentation.")
+        <*> option auto
+        (long "par-indent"
+          <> help "Minimal indentation of the first line of a new the paragraph. In portion of the page width."
+          <> value 0.05
+          <> showDefault
+          <> metavar "PARINDENT")
+        <*> option auto
+        (long "custos-indent"
+          <> help "Minimal indentation of the custos (dt. Kustode), i.e. the first syllable of the next page in the bottom line. In portion of the page width."
+          <> value 0.667
+          <> showDefault
+          <> metavar "CUSTOSINDENT")
+        <*> option auto
+        (long "sig-indent"
+          <> help "Minimal indentation of the sheet signature in portion of the page width."
+          <> value 0.05
+          <> showDefault
+          <> metavar "SIGINDENT")
+        <*> option auto
+        (long "sig-filling"
+          <> help "Maximal filling of the bottom line if it's a sheet signature."
+          <> value 0.333
+          <> showDefault
+          <> metavar "SIGFILL"))
+       <|>
+       (flag' AsDefault
+        (short 'C'
+         <> long "no-categorization"
+         <> help "Do not categorize the lines at all.")))
   <*> argument str (metavar "INFILE"
                     <> help "Path to the input file.")
 
@@ -145,16 +163,16 @@ main = execParser opts >>= run
 
 -- | Run the extractor with the parsed command line arguments.
 run :: PdfToText -> IO ()
-run (PdfToText (Just PdfMinerXml) outputMethod pages lines' spacing' headlines' footlines' inputFile) = do
+run (PdfToText (Just PdfMinerXml) outputMethod pages lines' spacing' headlines' footlines' lineCategorizer' inputFile) = do
   case (R.parseRanges pages)::(Either R.ParseError [R.Range Int]) of
     Left err -> do
       print err
       return ()
     Right ranges -> do
       glyphs <- B.readFile inputFile >>= parseXml ranges
-      mapM (extract outputMethod lines' spacing' headlines' footlines') glyphs
+      mapM (extract outputMethod lines' spacing' headlines' footlines' lineCategorizer') glyphs
       return ()
-run (PdfToText _ outputMethod pages lines' spacing' headlines' footlines' inputFile) = do
+run (PdfToText _ outputMethod pages lines' spacing' headlines' footlines' lineCategorizer' inputFile) = do
   case (R.parseRanges pages)::(Either R.ParseError [R.Range Int]) of
     Left err -> do
       print err
@@ -167,15 +185,15 @@ run (PdfToText _ outputMethod pages lines' spacing' headlines' footlines' inputF
         rootNode <- P.catalogPageNode catalog
         count <- P.pageNodeNKids rootNode
         let pages = map (\n -> n - 1) $ filter (R.inRanges ranges) [1 .. count]
-        mapM (extractPdfPage outputMethod lines' spacing' headlines' footlines' rootNode) pages
+        mapM (extractPdfPage outputMethod lines' spacing' headlines' footlines' lineCategorizer' rootNode) pages
         return ()
 
 -- | extract a single page using the pdf-toolbox
-extractPdfPage :: Maybe OutputMethod -> Int -> Double -> Int -> Int -> P.PageNode -> Int -> IO ()
-extractPdfPage outputMethod lines' spacing' headlines' footlines' rootNode n = do
+extractPdfPage :: Maybe OutputMethod -> Int -> Double -> Int -> Int -> LineCategorizer -> P.PageNode -> Int -> IO ()
+extractPdfPage outputMethod lines' spacing' headlines' footlines' lineCategorizer' rootNode n = do
   page <- P.pageNodePageByNum rootNode n
   spans <- P.pageExtractGlyphs page
-  extract outputMethod lines' spacing' headlines' footlines' $ concatMap P.spGlyphs spans
+  extract outputMethod lines' spacing' headlines' footlines' lineCategorizer' $ concatMap P.spGlyphs spans
   return ()
 
 
@@ -185,12 +203,13 @@ extract :: (Show g, Eq g, Glyph g) =>
   Double ->                     -- ^ spacing factor
   Int ->                        -- ^ headlines
   Int ->                        -- ^ footlines
+  LineCategorizer ->            -- ^ config of line categorizer
   [g] ->                        -- ^ glyphs on this page
   IO ()
-extract (Just Glyphs) _ _ _ _ glyphs = do
+extract (Just Glyphs) _ _ _ _ _ glyphs = do
   mapM (putStrLn . show) glyphs
   return ()
-extract (Just Info) lines' _ _ _ glyphs = do
+extract (Just Info) lines' _ _ _ _ glyphs = do
   putStr "#Glyphs: "
   print $ length glyphs
   putStr "Top: "
@@ -203,21 +222,27 @@ extract (Just Info) lines' _ _ _ glyphs = do
   putStr "Glyphs per Lines: "
   print $ map length lines
   return ()
-extract (Just NoSpaces) lines' _ _ _ glyphs = do
+extract (Just NoSpaces) lines' _ _ _ _ glyphs = do
   let lines = findLinesWindow lines' 5 2 True glyphs
   mapM (T.putStrLn . (linearizeLine (T.concat . mapMaybe text))) lines
   return ()
-extract (Just Spacing') lines' _ _ _ glyphs = do
+extract (Just Spacing') lines' _ _ _ _ glyphs = do
   let lines = findLinesWindow lines' 5 2 True glyphs
       csvOpts = Csv.defaultEncodeOptions {
         Csv.encDelimiter = fromIntegral $ ord ','
         }
   mapM (C.putStr . (Csv.encodeWith csvOpts) . spacingsInLine . (sortOn xLeft)) lines
   return ()
-extract _ lines' spacing' headlines' footlines' glyphs = do
+extract _ lines' spacing' headlines' footlines' (ByIndent pi ci si sf) glyphs = do
   let lines = findLinesWindow lines' 5 2 True glyphs
   mapM (T.putStrLn . (linearizeCategorizedLine (spacingFactor spacing'))) $
-    categorizeLines (byIndent 0.33 0.33) $
+    categorizeLines (byIndent pi ci si sf) $
+    (drop headlines') $ dropFoot footlines' lines
+  T.putStr(T.singleton $ chr 12) -- add form feed at end of page
+  return ()
+extract _ lines' spacing' headlines' footlines' AsDefault glyphs = do
+  let lines = findLinesWindow lines' 5 2 True glyphs
+  mapM (T.putStrLn . (linearizeLine (spacingFactor spacing'))) $
     (drop headlines') $ dropFoot footlines' lines
   T.putStr(T.singleton $ chr 12) -- add form feed at end of page
   return ()

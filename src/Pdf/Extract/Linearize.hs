@@ -34,8 +34,8 @@ data LineData = LineData
   , _line_glyphsInLine :: Int
   , _line_avgLeft :: Double
   , _line_mostLeft :: Double
-  , _line_avgGlyphs :: Double
   , _line_pageWidth :: Double
+  , _line_avgGlyphs :: Double
   , _line_linesOnPage :: Int
   }
 
@@ -72,23 +72,27 @@ categorizeLines f lines = f zippedWithData
 
 -- | Categorize lines by indent and some other features.
 byIndent :: Glyph g =>
-            Double ->           -- ^ indent of the custos in part of
-                                -- the pagewidth
-            Double ->           -- ^ line filling of the sheet signature
+            Double ->         -- ^ paragraph indent
+            Double ->         -- ^ indent of the custos in partion of
+                              -- the pagewidth
+            Double ->         -- ^ indent of the sheet signature in
+                              -- partion of the pagewidth
+            Double ->         -- ^ line filling of the sheet signature
             [([g], Int, LineData)] -> -- ^ the lines and line data
             [LineCategory g]
-byIndent _ _ [] = []
-byIndent custIndent sigFill ((line, count, ldata):ls)
+byIndent _ _ _ _ [] = []
+byIndent parIndent custIndent sigIndent sigFill ((line, count, ldata):ls)
   | (count == _line_linesOnPage ldata) &&
     ((_line_left ldata) > custIndent * (_line_pageWidth ldata)) =
-    (Custos line):[] ++ byIndent custIndent sigFill ls
+    (Custos line):[] ++ byIndent parIndent custIndent sigIndent sigFill ls
   | (count == _line_linesOnPage ldata) &&
-    ((_line_left ldata) > (_line_avgLeft ldata)) &&
+    ((_line_left ldata) > sigIndent * (_line_pageWidth ldata)) &&
+    --((_line_left ldata) > (_line_avgLeft ldata)) &&
     ((fromIntegral $ _line_glyphsInLine ldata) < (sigFill * (_line_avgGlyphs ldata))) =
-    (SheetSignature line):[] ++ byIndent custIndent sigFill ls
-  | (_line_left ldata) > (_line_avgLeft ldata) =
-    (FirstOfParagraph line):[] ++ byIndent custIndent sigFill ls
-  | otherwise = (DefaultLine line):[] ++ byIndent custIndent sigFill ls
+    (SheetSignature line):[] ++ byIndent parIndent custIndent sigIndent sigFill ls
+  | (_line_left ldata) > parIndent * (_line_pageWidth ldata) =
+    (FirstOfParagraph line):[] ++ byIndent parIndent custIndent sigIndent sigFill ls
+  | otherwise = (DefaultLine line):[] ++ byIndent parIndent custIndent sigIndent sigFill ls
 
 
 -- | Treat every line as a line from the middle of a paragraph. Use
