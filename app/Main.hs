@@ -50,6 +50,7 @@ data LineCategorizer
     Double                      -- ^ indentation of custos
     Double                      -- ^ indentation of sheet signature
     Double                      -- ^ line filling of sheet signature
+    LinearizationOpts
   | AsDefault
     Int                         -- ^ count of headlines to drop
     Int                         -- ^ count of footlines to drop
@@ -130,7 +131,70 @@ pdfToText_ = PdfToText
           <> help "Maximal filling of the bottom line if it's a sheet signature."
           <> value 0.333
           <> showDefault
-          <> metavar "SIGFILL"))
+          <> metavar "SIGFILL")
+        <*> (LinOpts
+             <$> ((flag Part3 Part3
+                  (long "head-keep-page"
+                   <> help "Keep only the page number found in the headline. (Default)"))
+                  <|>
+                  (flag' Drop3
+                   (long "head-drop"
+                    <> help "Drop the whole headline."))
+                  <|>
+                  (flag' Keep3
+                   (long "head-keep"
+                    <> help "Keep the whole headline.")))
+             <*> ((flag Part3 Part3
+                  (long "foot-keep-page"
+                   <> help "Keep only the page number found in the footline. (Default)"))
+                  <|>
+                  (flag' Drop3
+                   (long "foot-drop"
+                    <> help "Drop the whole footline."))
+                  <|>
+                  (flag' Keep3
+                   (long "foot-keep"
+                    <> help "Keep the whole footline.")))
+             <*> ((flag Drop2 Drop2
+                  (long "custos-drop"
+                   <> help "Drop the custos, i.e. the bottom line which contains the first syllable of the next page. (Default)"))
+                  <|>
+                  (flag' Keep2
+                   (long "custos-keep"
+                    <> help "Keep the custos.")))
+             <*> ((flag Drop2 Drop2
+                  (long "sig-drop"
+                   <> help "Drop the sheet signature in the bottom line. (Default)"))
+                  <|>
+                  (flag' Keep2
+                   (long "sig-keep"
+                    <> help "Keep the sheet signature.")))
+             <*> strOption (long "page-pre"
+                            <> help "The prefix for the page number if only the number is kept of a head- or footline."
+                            <> value "[["
+                            <> showDefault
+                            <> metavar "PAGEPRE")
+             <*> strOption (long "page-post"
+                            <> help "The postfix for the page number if only the number is kept of a head- or footline."
+                            <> value "]]"
+                            <> showDefault
+                            <> metavar "PAGEPOST")
+             <*> strOption (long "par"
+                            <> help "The prefix for linearizing the first line of a paragraph."
+                            <> value "\n\t"
+                            <> showDefault
+                            <> metavar "PAR")
+             <*> strOption (long "custos"
+                            <> help "The prefix for linearizing the custos."
+                            <> value "\t\t\t\t\t"
+                            <> showDefault
+                            <> metavar "CUSTOS")
+             <*> strOption (long "sig"
+                            <> help "The prefix for linearizing the sheet signature."
+                            <> value "\t\t\t"
+                            <> showDefault
+                            <> metavar "SIG")
+            ))
        <|>
        ((flag' AsDefault
         (short 'C'
@@ -230,18 +294,12 @@ extract Spacing' lines' _ _ glyphs = do
         }
   mapM (C.putStr . (Csv.encodeWith csvOpts) . spacingsInLine . (sortOn xLeft)) lines
   return ()
-extract _ lines' spacing' (ByIndent pi ci si sf) glyphs = do
+extract _ lines' spacing' (ByIndent pi ci si sf opts) glyphs = do
   let lines = findLinesWindow lines' 5 2 True glyphs
-  mapM (T.putStr . (linearizeCategorizedLine linOpts (spacingFactor spacing'))) $
+  mapM (T.putStr . (linearizeCategorizedLine opts (spacingFactor spacing'))) $
     categorizeLines (byIndent pi ci si sf) lines
   T.putStr(T.singleton $ chr 12) -- add form feed at end of page
   return ()
-  where
-    linOpts = LinOpts
-              Part3 Part3
-              Drop2 Drop2
-              "[[" "]]"
-              "\n\t" "\t\t\t\t\t" "\t\t\t"
 extract _ lines' spacing' (AsDefault headlines' footlines') glyphs = do
   let lines = findLinesWindow lines' 5 2 True glyphs
   mapM (T.putStrLn . (linearizeLine (spacingFactor spacing'))) $
