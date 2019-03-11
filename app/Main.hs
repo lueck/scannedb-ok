@@ -36,12 +36,22 @@ data PdfToText = PdfToText
   , fixedSpacingFactor :: Double
   , headlines :: Int
   , footlines :: Int
+  --, lineCategorizer :: LineCategorizer
   , inputFile :: String
   }
 
 data OutputMethod = Text | NoSpaces | Info | Glyphs | Spacing'
 
+
 data InputMethod = PdfInput | PdfMinerXml
+
+
+data LineCategorizer
+  = ByIndent
+    Double                      -- ^ indentation of custos
+    Double                      -- ^ line filling of sheet signature
+  | AsDefault
+
 
 -- | A parser for the command line arguments.
 pdfToText_ :: Parser PdfToText
@@ -104,6 +114,23 @@ pdfToText_ = PdfToText
                    <> help "Count of lines in the page footer to be dropped. Defaults to 0."
                    <> value 0
                    <> metavar "FOOTLINES")
+  -- <*> ((flag ByIndent ByIndent
+  --       (short 'i'
+  --        <> long "by-indent"
+  --        <> help "Categorize lines by their indentation.")
+  --       <*> option auto
+  --        (long "custos-indent"
+  --         <> help "Indentation of the custos (dt. Kustode), i.e. the first syllable of the next page in the bottom line."
+  --         <> metavar "CUSTOSINDENT")
+  --        <*> option auto
+  --        (long "sig-filling"
+  --        <> help "Maximal filling of the bottom line if it's a sheet signature."
+  --        <> metavar "SIGFILL"))
+  --      <|>
+  --      (flag' AsDefault
+  --       (short 'C'
+  --        <> long "no-categorization"
+  --        <> help "Do not categorize the lines at all.")))
   <*> argument str (metavar "INFILE"
                     <> help "Path to the input file.")
 
@@ -189,10 +216,12 @@ extract (Just Spacing') lines' _ _ _ glyphs = do
   return ()
 extract _ lines' spacing' headlines' footlines' glyphs = do
   let lines = findLinesWindow lines' 5 2 True glyphs
-  mapM (T.putStrLn . (linearizeLine (spacingFactor spacing'))) $
+  mapM (T.putStrLn . (linearizeCategorizedLine (spacingFactor spacing'))) $
+    categorizeLines (byIndent 0.33 0.33) $
     (drop headlines') $ dropFoot footlines' lines
   T.putStr(T.singleton $ chr 12) -- add form feed at end of page
   return ()
+
 
 dropHead :: Glyph g => Int -> [[g]] -> [[g]]
 dropHead 0 = id

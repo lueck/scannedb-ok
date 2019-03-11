@@ -8,6 +8,8 @@ import Data.List
 
 import Pdf.Extract.Glyph
 
+-- * Find the lines on a page.
+
 
 -- | Collect the glyphs of a page into lines. This simple algorithm
 -- works if the glyphs of a line are horizontally oriented. They
