@@ -37,11 +37,12 @@ source-repository head
 library
   exposed-modules:
                   Pdf.Extract.Glyph
-                , Pdf.Extract.PdfToolBox
+                , Pdf.Extract.Clustering
                 , Pdf.Extract.Lines
                 , Pdf.Extract.Linearize
-                , Pdf.Extract.PyPdfMiner
                 , Pdf.Extract.Spacing
+                , Pdf.Extract.PyPdfMiner
+                , Pdf.Extract.PdfToolBox
   other-modules:
                 Paths_googleb_ok
   hs-source-dirs:
