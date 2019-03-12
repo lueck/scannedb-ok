@@ -64,7 +64,7 @@ slidingWindow1D steps threshold drp getter start end points =
     getter' = getter . (\(Arg _ x) -> x)
     inWindow :: Double -> Double -> Bool
     inWindow offset coord = coord >= offset && coord <= offset + window
-    stepWidth = abs(end - start) / fromIntegral(steps - 1)
+    stepWidth = (end - start) / (fromIntegral $ steps - 1)
     window = stepWidth * 2 -- overlapping
 
 
