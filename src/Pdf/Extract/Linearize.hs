@@ -27,6 +27,7 @@ data (Glyph g) => LineCategory g
                                 -- some features, e.g. presence of a
                                 -- page number
   | Footline [g]                -- ^ last line that matches some features
+  | BlockQuote [g]              -- ^ an indented quotation
 
 
 -- | Categorize lines by applying a categorization function.
@@ -54,25 +55,22 @@ byIndent parIndent custIndent sigIndent sigFill ((line, count, ldata):ls)
     -- TODO: head skip exceeds baseline skip
     (Headline line):[] ++ byIndent parIndent custIndent sigIndent sigFill ls
   | (count == _line_linesOnPage ldata) &&
-    ((_line_left ldata) > custIndent * (_line_pageWidth ldata)) =
+    ((_line_left ldata) > custIndent * (_line_rightBorderUpperBound ldata)) =
     (Custos line):[] ++ byIndent parIndent custIndent sigIndent sigFill ls
   | (count == _line_linesOnPage ldata) &&
-    ((_line_left ldata) > sigIndent * (_line_pageWidth ldata)) &&
+    ((_line_left ldata) > sigIndent * (_line_rightBorderUpperBound ldata)) &&
     ((fromIntegral $ _line_glyphsInLine ldata) < (sigFill * (_line_avgGlyphs ldata))) =
     (SheetSignature line):[] ++ byIndent parIndent custIndent sigIndent sigFill ls
   | (count == _line_linesOnPage ldata) &&
     (containsNumbers line) =
     -- TODO: foot skip exceeds baseline skip
     (Footline line):[] ++ byIndent parIndent custIndent sigIndent sigFill ls
-  | (_line_left ldata) > (_line_leftBorder ldata) =
-    -- (_line_leftBorder ldata + parIndent *
-    --  -- avgWidth) = -- avgWidth ]3..4[
-    --  _line_glyphSize ldata) = -- glyphSize ]3..4[
-    -- --(fromMaybe avgWidth $ fmap size $ line ^? element 3)) =
+  | (_line_left ldata) > (_line_leftBorderUpperBound ldata) &&
+    (_line_glyphSize ldata) < (_line_glyphSizeLowerBound ldata) =
+    (BlockQuote line):[] ++ byIndent parIndent custIndent sigIndent sigFill ls
+  | (_line_left ldata) > (_line_leftBorderUpperBound ldata) =
     (FirstOfParagraph line):[] ++ byIndent parIndent custIndent sigIndent sigFill ls
   | otherwise = (DefaultLine line):[] ++ byIndent parIndent custIndent sigIndent sigFill ls
-  where
-    avgWidth = (_line_right ldata - _line_left ldata) / fromIntegral(_line_glyphsInLine ldata)
 
 
 -- | Returns True if the given line of glyphs contains at least one number.
@@ -107,6 +105,7 @@ data LinearizationOpts = LinOpts
   , _linopts_prePar :: T.Text
   , _linopts_preCustos :: T.Text
   , _linopts_preSheetSig :: T.Text
+  , _linopts_quote :: T.Text
   }
 
 -- | Linearize a categorized line.
@@ -127,6 +126,8 @@ linearizeCategorizedLine opts f (FirstOfParagraph glyphs) =
   _linopts_prePar opts  <> linearizeLine f glyphs <> "\n"
 linearizeCategorizedLine opts f (DefaultLine glyphs) =
   linearizeLine f glyphs <> "\n"
+linearizeCategorizedLine opts f (BlockQuote glyphs) =
+  _linopts_quote opts  <> linearizeLine f glyphs <> "\n"
 linearizeCategorizedLine LinOpts{_linopts_custos = Drop2} f (Custos glyphs) = ""
 linearizeCategorizedLine LinOpts{_linopts_custos = Keep2, _linopts_preCustos = pre}
   f (Custos glyphs) =

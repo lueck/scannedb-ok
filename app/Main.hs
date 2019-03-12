@@ -194,6 +194,11 @@ pdfToText_ = PdfToText
                             <> value "\t\t\t"
                             <> showDefault
                             <> metavar "SIG")
+             <*> strOption (long "blockquote"
+                            <> help "The prefix for linearizing a block quote."
+                            <> value "\t\t$$"
+                            <> showDefault
+                            <> metavar "BLOCKQUOTE")
             ))
        <|>
        ((flag' AsDefault

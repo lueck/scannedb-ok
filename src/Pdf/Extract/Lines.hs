@@ -48,84 +48,130 @@ glyphsBottom gs = foldl1 min $ map yBottom gs
 
 -- | Record for collecting information about the lines of a page.
 data LineData = LineData
-  { _line_left :: Double
-  , _line_right :: Double
-  , _line_glyphSize :: Double
-  , _line_glyphsInLine :: Int
-  , _line_avgLeft :: Double
-  , _line_mostLeft :: Double
-  , _line_pageWidth :: Double
-  , _line_avgGlyphs :: Double
-  , _line_avgGlyphWidth :: Double
-  , _line_leftBorder :: Double
+  { _line_left :: Double        -- ^ left pos of this line
+  , _line_right :: Double       -- ^ right pos of this line
+  , _line_glyphSize :: Double   -- ^ font size of this line (average)
+  , _line_glyphsInLine :: Int   -- ^ glyphs in this line
+  -- | data not special to this line
+  , _line_linesOnPage :: Int    -- ^ count of lines on the page
+  , _line_avgGlyphs :: Double   -- ^ average count of glyphs per line
+  , _line_leftBorderLowerBound :: Double
+  , _line_leftBorderUpperBound :: Double
   , _line_linesAtLeftBorder :: Int
   , _line_leftBorderClusters :: [[Double]]
-  , _line_linesOnPage :: Int
+  , _line_rightBorderLowerBound :: Double
+  , _line_rightBorderUpperBound :: Double
+  , _line_linesAtRightBorder :: Int
+  , _line_rightBorderClusters :: [[Double]]
+  , _line_glyphSizeLowerBound :: Double
+  , _line_glyphSizeUpperBound :: Double
+  , _line_glyphSizeClusters :: [[Double]]
   }
 
 -- | Generate information about lines and page.
 genLineInfo :: Glyph g => [[g]] -> [LineData]
 genLineInfo lines =
   map (\(l, r, s, c) ->
-         LineData l r (s/fromIntegral c) c
-         ((sumLeft lineTuple) / linesCount)
-         mostLeft
-         mostRight
-         ((fromIntegral $ sumGlyphs lineTuple) / linesCount)
-         ((avgGlyphWidth lineTuple) / linesCount)
+         LineData l r s c --(s/fromIntegral c) c
+         -- data not special to this line
+         linesCount
+         ((fromIntegral $ sumGlyphs lineTuple) / linesCountFrac)
+         leftBorderLowerBound
          leftBorderUpperBound
-         maxSize
-         clusters
-         (length lineTuple))
+         leftBorderSize
+         leftBorderClusters
+         rightBorderLowerBound
+         rightBorderUpperBound
+         rightBorderSize
+         rightBorderClusters
+         glyphSizeLowerBound
+         glyphSizeUpperBound
+         glyphSizeClusters)
   lineTuple
   where
     lineTuple :: [(Double, Double, Double, Int)]
     lineTuple = map (foldl (\(left, right, size, count) x ->
                                (min left $ fst x,
                                 max right $ fst x,
-                                size + (snd x),
+                                max size $ snd x, --size + (snd x),
                                 count + 1))
                       (1000, 0, 0, 0) .
                       map (\g -> (xLeft g, size g))) lines
-    sumLeft = foldl (+) 0 . map getLeft
     mostLeft = foldl1 min $ map getLeft lineTuple
     mostRight = foldl1 max $ map getRight lineTuple
     sumGlyphs = foldl (+) 0 . map getCount
     mostGlyphs = foldl max 0 $ map getCount lineTuple
-    avgGlyphWidth = foldl (\acc (l, r, s, c) -> acc + ((r - l) / fromIntegral(c))) 0
+    tallestGlyph = ceiling $ foldl max 0 $ map getSize lineTuple
     getLeft (l, _, _, _) = l
     getRight (_, r, _, _) = r
+    getSize (_, _, s, _) = s
     getCount (_, _, _, c) = c
-    linesCount = fromIntegral $ length lineTuple
-    clusters = slidingWindow1D mostGlyphs 0 False id 0 mostRight $
-               map getLeft lineTuple
-    -- We assume that the non-indented lines make the biggest
-    -- cluster. And the centroid of this cluster is assumed to be the
-    -- left border.
-    (maxCluster, maxSize) :: ([Double], Int) =
-      foldl (\(accL, accN) (l, n) ->
-                (if n > accN then (l, n) else (accL, accN))) ([],0)
-      $ zip clusters $ map length clusters
+    linesCount = length lines
+    linesCountFrac = fromIntegral $ linesCount
+    -- Left Border: We assume that the non-indented lines make the
+    -- biggest cluster. And the lower (right) bound of this cluster is
+    -- assumed to be the left border and the upper bound is used to
+    -- identify indented lines.
+    leftBorderClusters = slidingWindow1D (4 * mostGlyphs) 0 False id 0 mostRight $
+                         map getLeft lineTuple
+    (leftBorderSize, leftBorderCluster) = longest' leftBorderClusters
     leftBorderUpperBound :: Double
-    leftBorderUpperBound = foldl max 0 maxCluster
+    leftBorderUpperBound = foldl max 0 leftBorderCluster
     leftBorderLowerBound :: Double
-    leftBorderLowerBound = foldl min leftBorderUpperBound maxCluster
+    leftBorderLowerBound = foldl min leftBorderUpperBound leftBorderCluster
+    -- Right Border:
+    rightBorderClusters = slidingWindow1D mostGlyphs 0 False id 0 mostRight $
+                          map getRight lineTuple
+    (rightBorderSize, rightBorderCluster) = longest' rightBorderClusters
+    rightBorderUpperBound :: Double
+    rightBorderUpperBound = foldl max 0 rightBorderCluster
+    rightBorderLowerBound :: Double
+    rightBorderLowerBound = foldl min rightBorderUpperBound rightBorderCluster
+    -- Clustering glyph size:
+    glyphSizeClusters = slidingWindow1D (tallestGlyph * 10) 0 False id 0 (fromIntegral tallestGlyph) $
+                        map getSize lineTuple
+                        -- map (\l -> getSize l / (fromIntegral $ getCount l)) lineTuple
+    glyphSizeCluster = longest glyphSizeClusters
+    glyphSizeUpperBound :: Double
+    glyphSizeUpperBound = foldl max 0 glyphSizeCluster
+    glyphSizeLowerBound :: Double
+    glyphSizeLowerBound = foldl min glyphSizeUpperBound glyphSizeCluster
 
 
+-- | Print a list of 'LineData' in the IO monad.
 printLineInfo :: [LineData] -> IO ()
 printLineInfo infos = do
   putStr "#Lines: "
   print $ length $ infos
   putStr "Glyphs per Lines: "
   print $ map _line_glyphsInLine infos
+
   putStr "Left border, lines starting there: "
   print $ fromMaybe "<NA>" $ fmap (show . _line_linesAtLeftBorder) fstInfo
   putStr "Left border (upper bound): "
-  print $ fromMaybe "<NA>" $ fmap (show . _line_leftBorder) fstInfo
+  print $ fromMaybe "<NA>" $ fmap (show . _line_leftBorderUpperBound) fstInfo
   putStr "Left border clusters: "
   print $ fromMaybe "<NA>" $ fmap (show . _line_leftBorderClusters) fstInfo
   putStr "Left most glyph of lines: "
   print $ map _line_left infos
+
+  putStr "Right border, lines starting there: "
+  print $ fromMaybe "<NA>" $ fmap (show . _line_linesAtRightBorder) fstInfo
+  putStr "Right border (upper bound): "
+  print $ fromMaybe "<NA>" $ fmap (show . _line_rightBorderUpperBound) fstInfo
+  putStr "Right border clusters: "
+  print $ fromMaybe "<NA>" $ fmap (show . _line_rightBorderClusters) fstInfo
+  putStr "Right most glyph of lines: "
+  print $ map _line_right infos
+
+  putStr "Glyph Size (lower bound of biggest cluster): "
+  print $ fromMaybe "<NA>" $ fmap (show . _line_glyphSizeLowerBound) fstInfo
+  putStr "Glyph size clusters: "
+  print $ fromMaybe "<NA>" $ fmap (show . _line_glyphSizeClusters) fstInfo
+  putStr "Glyph sizes of lines: "
+  print $ map _line_glyphSize infos
+
+
   return ()
   where
     fstInfo = infos ^? element 1
