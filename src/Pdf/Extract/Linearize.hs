@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings, ScopedTypeVariables #-}
 module Pdf.Extract.Linearize where
 
 -- | Linearize the glyphs of a line
@@ -9,7 +9,7 @@ import Data.Maybe
 import Control.Lens
 
 import Pdf.Extract.Glyph
-
+import Pdf.Extract.Clustering
 
 -- * Categorize Lines
 
@@ -32,11 +32,14 @@ data (Glyph g) => LineCategory g
 data LineData = LineData
   { _line_left :: Double
   , _line_right :: Double
+  , _line_glyphSize :: Double
   , _line_glyphsInLine :: Int
   , _line_avgLeft :: Double
   , _line_mostLeft :: Double
   , _line_pageWidth :: Double
   , _line_avgGlyphs :: Double
+  , _line_avgGlyphWidth :: Double
+  , _line_leftBorder :: Double
   , _line_linesOnPage :: Int
   }
 
@@ -48,27 +51,46 @@ categorizeLines :: Glyph g =>
                 -> [LineCategory g]
 categorizeLines f lines = f zippedWithData
   where
-    mostLeftRight :: [(Double, Double, Int)]
-    mostLeftRight = map (foldl (\(left, right, count) x ->
-                                  (min left x, max right x, count + 1))
-                         (1000, 0, 0) . map xLeft) lines
-    lineData = map (\(l, r, c) -> LineData l r c
+    mostLeftRight :: [(Double, Double, Double, Int)]
+    mostLeftRight = map (foldl (\(left, right, size, count) x ->
+                                  (min left $ fst x,
+                                   max right $ fst x,
+                                   size + (snd x),
+                                   count + 1))
+                          (1000, 0, 0, 0) .
+                          map (\g -> (xLeft g, size g))) lines
+    lineData = map (\(l, r, s, c) -> LineData l r (s/fromIntegral c) c
                                   ((sumLeft mostLeftRight) / linesCount)
-                                  (mostLeft mostLeftRight)
+                                  mostLeft
                                   (mostRight mostLeftRight)
                                   ((fromIntegral $ sumGlyphs mostLeftRight) / linesCount)
+                                  ((avgGlyphWidth mostLeftRight) / linesCount)
+                                  leftBorder
                                   (length mostLeftRight))
                mostLeftRight
     --zippedWithData :: Glyph g => [([g], Int, LineData)]
     zippedWithData = zip3 lines [1..] lineData
     sumLeft = foldl (+) 0 . map getLeft
-    mostLeft = foldl1 min . map getLeft
+    mostLeft = foldl1 min $ map getLeft mostLeftRight
     mostRight = foldl1 max . map getRight
     sumGlyphs = foldl (+) 0 . map getCount
-    getLeft (l, _, _) = l
-    getRight (_, r, _) = r
-    getCount (_, _, c) = c
+    mostGlyphs = foldl1 max . map getCount
+    avgGlyphWidth = foldl (\acc (l, r, s, c) -> acc + ((r - l) / fromIntegral(c))) 0
+    getLeft (l, _, _, _) = l
+    getRight (_, r, _, _) = r
+    getCount (_, _, _, c) = c
     linesCount = fromIntegral $ length mostLeftRight
+    clusters = slidingWindow1D (5 * mostGlyphs mostLeftRight) 0 False id 0 mostLeft $
+               map getLeft mostLeftRight
+    -- We assume that the non-indented lines make the biggest
+    -- cluster. And the centroid of this cluster is assumed to be the
+    -- left border.
+    (maxCluster, maxSize) :: ([Double], Int) =
+      foldl (\(accL, accN) (l, n) ->
+                (if n > accN then (l, n) else (accL, accN))) ([],0)
+      $ zip clusters $ map length clusters
+    leftBorder :: Double
+    leftBorder = foldl (+) 0 maxCluster / fromIntegral maxSize
 
 
 -- | Categorize lines by indent and some other features.
@@ -98,15 +120,11 @@ byIndent parIndent custIndent sigIndent sigFill ((line, count, ldata):ls)
     (containsNumbers line) =
     -- TODO: foot skip exceeds baseline skip
     (Footline line):[] ++ byIndent parIndent custIndent sigIndent sigFill ls
-  -- Paragraph:
-  --
-  -- If first glyph is more right than the average: Is it a secure
-  -- criterion for a new paragraph? -- Not if we don't have a
-  -- paragraph at all!
-  -- | (_line_left ldata) > parIndent * (_line_pageWidth ldata) =
   | (_line_left ldata) >
-    (_line_avgLeft ldata + parIndent *
-     (fromMaybe avgWidth $ fmap size $ line ^? element 3)) =
+    (_line_leftBorder ldata + parIndent *
+     -- avgWidth) = -- avgWidth ]3..4[
+     _line_glyphSize ldata) = -- glyphSize ]3..4[
+    --(fromMaybe avgWidth $ fmap size $ line ^? element 3)) =
     (FirstOfParagraph line):[] ++ byIndent parIndent custIndent sigIndent sigFill ls
   | otherwise = (DefaultLine line):[] ++ byIndent parIndent custIndent sigIndent sigFill ls
   where
