@@ -280,10 +280,7 @@ extract Info lines' _ _ page' glyphs = do
   putStr "Bottom: "
   print $ glyphsBottom glyphs
   let lines = findLinesWindow lines' 5 2 True glyphs
-  putStr "#Lines: "
-  print $ length $ lines
-  putStr "Glyphs per Lines: "
-  print $ map length lines
+  printLineInfo $ genLineInfo lines
   return ()
 extract NoSpaces lines' _ _ _ glyphs = do
   let lines = findLinesWindow lines' 5 2 True glyphs

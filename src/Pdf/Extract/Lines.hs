@@ -6,6 +6,9 @@ module Pdf.Extract.Lines where
 
 import Data.List.Split
 import Data.List
+import Data.Maybe
+import System.IO
+import Control.Lens
 
 import Pdf.Extract.Glyph
 import Pdf.Extract.Clustering
@@ -55,6 +58,8 @@ data LineData = LineData
   , _line_avgGlyphs :: Double
   , _line_avgGlyphWidth :: Double
   , _line_leftBorder :: Double
+  , _line_linesAtLeftBorder :: Int
+  , _line_leftBorderClusters :: [[Double]]
   , _line_linesOnPage :: Int
   }
 
@@ -63,35 +68,37 @@ genLineInfo :: Glyph g => [[g]] -> [LineData]
 genLineInfo lines =
   map (\(l, r, s, c) ->
          LineData l r (s/fromIntegral c) c
-         ((sumLeft mostLeftRight) / linesCount)
+         ((sumLeft lineTuple) / linesCount)
          mostLeft
-         (mostRight mostLeftRight)
-         ((fromIntegral $ sumGlyphs mostLeftRight) / linesCount)
-         ((avgGlyphWidth mostLeftRight) / linesCount)
+         mostRight
+         ((fromIntegral $ sumGlyphs lineTuple) / linesCount)
+         ((avgGlyphWidth lineTuple) / linesCount)
          leftBorderUpperBound
-         (length mostLeftRight))
-  mostLeftRight
+         maxSize
+         clusters
+         (length lineTuple))
+  lineTuple
   where
-    mostLeftRight :: [(Double, Double, Double, Int)]
-    mostLeftRight = map (foldl (\(left, right, size, count) x ->
-                                  (min left $ fst x,
-                                   max right $ fst x,
-                                   size + (snd x),
-                                   count + 1))
-                          (1000, 0, 0, 0) .
-                          map (\g -> (xLeft g, size g))) lines
+    lineTuple :: [(Double, Double, Double, Int)]
+    lineTuple = map (foldl (\(left, right, size, count) x ->
+                               (min left $ fst x,
+                                max right $ fst x,
+                                size + (snd x),
+                                count + 1))
+                      (1000, 0, 0, 0) .
+                      map (\g -> (xLeft g, size g))) lines
     sumLeft = foldl (+) 0 . map getLeft
-    mostLeft = foldl1 min $ map getLeft mostLeftRight
-    mostRight = foldl1 max . map getRight
+    mostLeft = foldl1 min $ map getLeft lineTuple
+    mostRight = foldl1 max $ map getRight lineTuple
     sumGlyphs = foldl (+) 0 . map getCount
-    mostGlyphs = foldl1 max . map getCount
+    mostGlyphs = foldl max 0 $ map getCount lineTuple
     avgGlyphWidth = foldl (\acc (l, r, s, c) -> acc + ((r - l) / fromIntegral(c))) 0
     getLeft (l, _, _, _) = l
     getRight (_, r, _, _) = r
     getCount (_, _, _, c) = c
-    linesCount = fromIntegral $ length mostLeftRight
-    clusters = slidingWindow1D (5 * mostGlyphs mostLeftRight) 0 False id 0 mostLeft $
-               map getLeft mostLeftRight
+    linesCount = fromIntegral $ length lineTuple
+    clusters = slidingWindow1D mostGlyphs 0 False id 0 mostRight $
+               map getLeft lineTuple
     -- We assume that the non-indented lines make the biggest
     -- cluster. And the centroid of this cluster is assumed to be the
     -- left border.
@@ -103,3 +110,22 @@ genLineInfo lines =
     leftBorderUpperBound = foldl max 0 maxCluster
     leftBorderLowerBound :: Double
     leftBorderLowerBound = foldl min leftBorderUpperBound maxCluster
+
+
+printLineInfo :: [LineData] -> IO ()
+printLineInfo infos = do
+  putStr "#Lines: "
+  print $ length $ infos
+  putStr "Glyphs per Lines: "
+  print $ map _line_glyphsInLine infos
+  putStr "Left border, lines starting there: "
+  print $ fromMaybe "<NA>" $ fmap (show . _line_linesAtLeftBorder) fstInfo
+  putStr "Left border (upper bound): "
+  print $ fromMaybe "<NA>" $ fmap (show . _line_leftBorder) fstInfo
+  putStr "Left border clusters: "
+  print $ fromMaybe "<NA>" $ fmap (show . _line_leftBorderClusters) fstInfo
+  putStr "Left most glyph of lines: "
+  print $ map _line_left infos
+  return ()
+  where
+    fstInfo = infos ^? element 1

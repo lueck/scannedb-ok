@@ -64,11 +64,11 @@ byIndent parIndent custIndent sigIndent sigFill ((line, count, ldata):ls)
     (containsNumbers line) =
     -- TODO: foot skip exceeds baseline skip
     (Footline line):[] ++ byIndent parIndent custIndent sigIndent sigFill ls
-  | (_line_left ldata) >
-    (_line_leftBorder ldata + parIndent *
-     -- avgWidth) = -- avgWidth ]3..4[
-     _line_glyphSize ldata) = -- glyphSize ]3..4[
-    --(fromMaybe avgWidth $ fmap size $ line ^? element 3)) =
+  | (_line_left ldata) > (_line_leftBorder ldata) =
+    -- (_line_leftBorder ldata + parIndent *
+    --  -- avgWidth) = -- avgWidth ]3..4[
+    --  _line_glyphSize ldata) = -- glyphSize ]3..4[
+    -- --(fromMaybe avgWidth $ fmap size $ line ^? element 3)) =
     (FirstOfParagraph line):[] ++ byIndent parIndent custIndent sigIndent sigFill ls
   | otherwise = (DefaultLine line):[] ++ byIndent parIndent custIndent sigIndent sigFill ls
   where
