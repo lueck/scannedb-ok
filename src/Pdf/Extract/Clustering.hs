@@ -4,6 +4,7 @@ module Pdf.Extract.Clustering where
 
 import Data.List
 import Data.List.Split
+import Data.Semigroup
 
 
 -- | Simple clustering based on a sliding window.
@@ -33,8 +34,7 @@ import Data.List.Split
 -- The problem maybe 2, the splitting by zero glyphs at a window
 -- height. The page may be dirty or the lines may be skew.
 slidingWindow1D ::
-  (Eq a)
-  => Int                      -- ^ count of steps
+  Int                         -- ^ count of steps
   -> Int                      -- ^ threshold for splitting clusters
   -> Bool                     -- ^ drop if count of points in a window
                               -- is below threshold
@@ -44,6 +44,11 @@ slidingWindow1D ::
   -> [a]                      -- ^ list of data points to be clustered
   -> [[a]]                    -- ^ returns a list of clusters (lists)
 slidingWindow1D steps threshold drp getter start end points =
+  -- We wrap the points into 'Arg' in order to not need them to be an
+  -- instance of 'Eq' and to make 'nub' work in a way that does not
+  -- reduce the cluster for equal points (e.g. when clustering glyph
+  -- sizes).
+  map (map (\(Arg _ x) -> x)) $
   (if drp
     then filter ((>threshold) . length)    -- drop windows under threshold
     else filter ((>0) . length)) $ -- remove empty windows
@@ -52,10 +57,21 @@ slidingWindow1D steps threshold drp getter start end points =
   -- split by empty windows
   splitWhen ((<=threshold) . length) $
   -- for each step filter the data points in window
-  map (\stp -> (filter ((inWindow stp) . getter) points)) $
+  map (\stp -> (filter ((inWindow stp) . getter') points')) $
   map (\n -> start + fromIntegral(n) * stepWidth) [0..steps]
   where
+    points' = map (uncurry Arg) $ zip [1..] points
+    getter' = getter . (\(Arg _ x) -> x)
     inWindow :: Double -> Double -> Bool
     inWindow offset coord = coord >= offset && coord <= offset + window
     stepWidth = abs(end - start) / fromIntegral(steps - 1)
     window = stepWidth * 2 -- overlapping
+
+
+-- | Return the longest list of a list of lists.
+longest :: Foldable t => [t a] -> t a
+longest xs = e where Arg _ e = maximum [Arg (length x) x | x <- xs]
+
+-- | Return the longest list of a list of lists and the length.
+longest' :: Foldable t => [t a] -> (Int, t a)
+longest' xs = (l, e) where Arg l e = maximum [Arg (length x) x | x <- xs]
