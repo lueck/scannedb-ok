@@ -233,7 +233,8 @@ run (PdfToText PdfMinerXml outputMethod pages lines' spacing' lineCategorizer' i
       return ()
     Right ranges -> do
       glyphs <- B.readFile inputFile >>= parseXml ranges
-      mapM (extract outputMethod lines' spacing' lineCategorizer') glyphs
+      mapM (uncurry (extract outputMethod lines' spacing' lineCategorizer')) $
+        zip [1..] glyphs
       return ()
 run (PdfToText _ outputMethod pages lines' spacing' lineCategorizer' inputFile) = do
   case (R.parseRanges pages)::(Either R.ParseError [R.Range Int]) of
@@ -256,7 +257,7 @@ extractPdfPage :: OutputMethod -> Int -> Double -> LineCategorizer -> P.PageNode
 extractPdfPage outputMethod lines' spacing' lineCategorizer' rootNode n = do
   page <- P.pageNodePageByNum rootNode n
   spans <- P.pageExtractGlyphs page
-  extract outputMethod lines' spacing' lineCategorizer' $ concatMap P.spGlyphs spans
+  extract outputMethod lines' spacing' lineCategorizer' n $ concatMap P.spGlyphs spans
   return ()
 
 
@@ -265,12 +266,13 @@ extract :: (Show g, Eq g, Glyph g) =>
   Int ->                        -- ^ count of lines
   Double ->                     -- ^ spacing factor
   LineCategorizer ->            -- ^ config of line categorizer
+  Int ->                        -- ^ page number
   [g] ->                        -- ^ glyphs on this page
   IO ()
-extract Glyphs _ _ _ glyphs = do
+extract Glyphs _ _ _ _ glyphs = do
   mapM (putStrLn . show) glyphs
   return ()
-extract Info lines' _ _ glyphs = do
+extract Info lines' _ _ page' glyphs = do
   putStr "#Glyphs: "
   print $ length glyphs
   putStr "Top: "
@@ -283,13 +285,13 @@ extract Info lines' _ _ glyphs = do
   putStr "Glyphs per Lines: "
   print $ map length lines
   return ()
-extract NoSpaces lines' _ _ glyphs = do
+extract NoSpaces lines' _ _ _ glyphs = do
   let lines = findLinesWindow lines' 5 2 True glyphs
   mapM (T.putStrLn . (linearizeLine (T.concat . mapMaybe text))) lines
   return ()
-extract Spacing' lines' _ _ glyphs = do
+extract Spacing' lines' _ _ page' glyphs = do
   let lines = findLinesWindow lines' 5 2 True glyphs
-      lines_ = zip3 (map Just [1..]) (repeat Nothing) $ map (sortOn xLeft) lines
+      lines_ = zip3 (map Just [1..]) (repeat (Just page')) $ map (sortOn xLeft) lines
       csvOpts = Csv.defaultEncodeOptions {
         Csv.encDelimiter = fromIntegral $ ord ','
         }
@@ -298,13 +300,13 @@ extract Spacing' lines' _ _ glyphs = do
   where
     getGlyph :: Glyph g => (a, b, [g]) -> [g]
     getGlyph (_, _, g) = g
-extract _ lines' spacing' (ByIndent pi ci si sf opts) glyphs = do
+extract _ lines' spacing' (ByIndent pi ci si sf opts) _ glyphs = do
   let lines = findLinesWindow lines' 5 2 True glyphs
   mapM (T.putStr . (linearizeCategorizedLine opts (spacingFactor spacing'))) $
     categorizeLines (byIndent pi ci si sf) lines
   T.putStr(T.singleton $ chr 12) -- add form feed at end of page
   return ()
-extract _ lines' spacing' (AsDefault headlines' footlines') glyphs = do
+extract _ lines' spacing' (AsDefault headlines' footlines') _ glyphs = do
   let lines = findLinesWindow lines' 5 2 True glyphs
   mapM (T.putStrLn . (linearizeLine (spacingFactor spacing'))) $
     (drop headlines') $ dropFoot footlines' lines
