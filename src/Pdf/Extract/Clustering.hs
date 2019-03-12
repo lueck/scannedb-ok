@@ -20,11 +20,11 @@ import Data.List.Split
 -- overlap.
 --
 -- 2) The resulting list of glyphs in each height is then split where
--- the count of glyphs falls below a certain threshold. The glyphs in
--- windows with count lower than the treshold are lost--this may be
--- wanted in case of dirt. The result is a list of lists, where each
--- inner list is a sequence of glyphs in a window. Since the windows
--- overlap, each glyph will show up in more than one window.
+-- the count of glyphs falls below or equals a certain threshold. The
+-- glyphs in windows with count lower than the treshold are lost--this
+-- may be wanted in case of dirt. The result is a list of lists, where
+-- each inner list is a sequence of glyphs in a window. Since the
+-- windows overlap, each glyph will show up in more than one window.
 --
 -- 3) We concat these inner lists and then remove the duplicate
 -- glyphs. The result is a list of list of glyphs at similar heights,
@@ -45,17 +45,17 @@ slidingWindow1D ::
   -> [[a]]                    -- ^ returns a list of clusters (lists)
 slidingWindow1D steps threshold drp getter start end points =
   (if drp
-    then filter ((>=threshold) . length)    -- drop windows under threshold
+    then filter ((>threshold) . length)    -- drop windows under threshold
     else filter ((>0) . length)) $ -- remove empty windows
   -- concat windows and remove duplicates again
   map (nub . concat) $
   -- split by empty windows
-  splitWhen ((<threshold) . length) $
+  splitWhen ((<=threshold) . length) $
   -- for each step filter the data points in window
   map (\stp -> (filter ((inWindow stp) . getter) points)) $
   map (\n -> start + fromIntegral(n) * stepWidth) [0..steps]
   where
     inWindow :: Double -> Double -> Bool
     inWindow offset coord = coord >= offset && coord <= offset + window
-    stepWidth = abs((end - start) / fromIntegral(steps - 1))
+    stepWidth = abs(end - start) / fromIntegral(steps - 1)
     window = stepWidth * 2 -- overlapping
