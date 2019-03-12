@@ -19,7 +19,7 @@ import qualified Data.Range.Parser as R
 import qualified Data.Range.Range as R
 import qualified Data.Csv as Csv
 import qualified Data.ByteString.Lazy.Char8 as C
-
+import Data.Tuple.Extra
 
 import Pdf.Extract.Lines
 import Pdf.Extract.Linearize
@@ -289,11 +289,15 @@ extract NoSpaces lines' _ _ glyphs = do
   return ()
 extract Spacing' lines' _ _ glyphs = do
   let lines = findLinesWindow lines' 5 2 True glyphs
+      lines_ = zip3 (map Just [1..]) (repeat Nothing) $ map (sortOn xLeft) lines
       csvOpts = Csv.defaultEncodeOptions {
         Csv.encDelimiter = fromIntegral $ ord ','
         }
-  mapM (C.putStr . (Csv.encodeWith csvOpts) . spacingsInLine . (sortOn xLeft)) lines
+  mapM (C.putStr . (Csv.encodeWith csvOpts) . (uncurry3 spacingsInLine)) lines_
   return ()
+  where
+    getGlyph :: Glyph g => (a, b, [g]) -> [g]
+    getGlyph (_, _, g) = g
 extract _ lines' spacing' (ByIndent pi ci si sf opts) glyphs = do
   let lines = findLinesWindow lines' 5 2 True glyphs
   mapM (T.putStr . (linearizeCategorizedLine opts (spacingFactor spacing'))) $

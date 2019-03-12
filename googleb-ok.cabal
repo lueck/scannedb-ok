@@ -85,6 +85,7 @@ executable googleb-ok
               , optparse-applicative
               , range
               , cassava
+              , extra
   default-language: Haskell2010
 
 test-suite googleb-ok-test
