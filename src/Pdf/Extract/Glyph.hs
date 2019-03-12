@@ -21,9 +21,13 @@ class Glyph a where
   code :: a -> Int
   font :: a -> Maybe String
   xLeft :: a -> Double
-  xLeft a = _bbox_xBottomLeft $ bbox a
+  xLeft = _bbox_xBottomLeft . bbox
+  xRight :: a -> Double
+  xRight = _bbox_xTopRight . bbox
   yBottom :: a -> Double
-  yBottom a = _bbox_yBottomLeft $ bbox a
+  yBottom = _bbox_yBottomLeft . bbox
+  yTop :: a -> Double
+  yTop = _bbox_yTopRight . bbox
   size :: a -> Double
   size a = abs((_bbox_yTopRight $ bbox a) - (_bbox_yBottomLeft $ bbox a))
   width :: a -> Double
