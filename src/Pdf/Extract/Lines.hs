@@ -1,3 +1,4 @@
+{-# LANGUAGE ScopedTypeVariables #-}
 module Pdf.Extract.Lines where
 
 -- | Find the lines on a page.
@@ -38,3 +39,67 @@ glyphsTop = foldl max 0 . map yBottom
 glyphsBottom :: Glyph g => [g] -> Double
 glyphsBottom [] = 0
 glyphsBottom gs = foldl1 min $ map yBottom gs
+
+
+-- * Information about lines for further parsing.
+
+-- | Record for collecting information about the lines of a page.
+data LineData = LineData
+  { _line_left :: Double
+  , _line_right :: Double
+  , _line_glyphSize :: Double
+  , _line_glyphsInLine :: Int
+  , _line_avgLeft :: Double
+  , _line_mostLeft :: Double
+  , _line_pageWidth :: Double
+  , _line_avgGlyphs :: Double
+  , _line_avgGlyphWidth :: Double
+  , _line_leftBorder :: Double
+  , _line_linesOnPage :: Int
+  }
+
+-- | Generate information about lines and page.
+genLineInfo :: Glyph g => [[g]] -> [LineData]
+genLineInfo lines =
+  map (\(l, r, s, c) ->
+         LineData l r (s/fromIntegral c) c
+         ((sumLeft mostLeftRight) / linesCount)
+         mostLeft
+         (mostRight mostLeftRight)
+         ((fromIntegral $ sumGlyphs mostLeftRight) / linesCount)
+         ((avgGlyphWidth mostLeftRight) / linesCount)
+         leftBorderUpperBound
+         (length mostLeftRight))
+  mostLeftRight
+  where
+    mostLeftRight :: [(Double, Double, Double, Int)]
+    mostLeftRight = map (foldl (\(left, right, size, count) x ->
+                                  (min left $ fst x,
+                                   max right $ fst x,
+                                   size + (snd x),
+                                   count + 1))
+                          (1000, 0, 0, 0) .
+                          map (\g -> (xLeft g, size g))) lines
+    sumLeft = foldl (+) 0 . map getLeft
+    mostLeft = foldl1 min $ map getLeft mostLeftRight
+    mostRight = foldl1 max . map getRight
+    sumGlyphs = foldl (+) 0 . map getCount
+    mostGlyphs = foldl1 max . map getCount
+    avgGlyphWidth = foldl (\acc (l, r, s, c) -> acc + ((r - l) / fromIntegral(c))) 0
+    getLeft (l, _, _, _) = l
+    getRight (_, r, _, _) = r
+    getCount (_, _, _, c) = c
+    linesCount = fromIntegral $ length mostLeftRight
+    clusters = slidingWindow1D (5 * mostGlyphs mostLeftRight) 0 False id 0 mostLeft $
+               map getLeft mostLeftRight
+    -- We assume that the non-indented lines make the biggest
+    -- cluster. And the centroid of this cluster is assumed to be the
+    -- left border.
+    (maxCluster, maxSize) :: ([Double], Int) =
+      foldl (\(accL, accN) (l, n) ->
+                (if n > accN then (l, n) else (accL, accN))) ([],0)
+      $ zip clusters $ map length clusters
+    leftBorderUpperBound :: Double
+    leftBorderUpperBound = foldl max 0 maxCluster
+    leftBorderLowerBound :: Double
+    leftBorderLowerBound = foldl min leftBorderUpperBound maxCluster
