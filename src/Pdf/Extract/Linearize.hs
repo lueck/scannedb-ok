@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings, TemplateHaskell #-}
 module Pdf.Extract.Linearize where
 
 -- | Linearize the glyphs of a line
@@ -30,6 +30,14 @@ data (Glyph g) => LineCategory g
   | BlockQuote [g]              -- ^ an indented quotation
 
 
+data ByIndentOpts = ByIndentOpts
+  { _byInd_parInd :: Double    -- ^ paragraph indent
+  , _byInd_custInd :: Double   -- ^ indent of the custos in partion of the pagewidth
+  , _byInd_sigInd :: Double    -- ^ indent of the sheet signature in partion of the pagewidth
+  , _byInd_sigFill :: Double   -- ^ line filling of the sheet signature
+  , _byInd_parseQuote :: Bool  -- ^ parse for block quotes
+  }
+
 -- | Categorize lines by applying a categorization function.
 categorizeLines :: Glyph g =>
                    ([([g], Int, LineData)] -> [LineCategory g])
@@ -40,40 +48,35 @@ categorizeLines f lines = f $ zip3 lines [1..] $ genLineInfo lines
 
 -- | Categorize lines by indent and some other features.
 byIndent :: Glyph g =>
-            Double ->         -- ^ paragraph indent
-            Double ->         -- ^ indent of the custos in partion of
-                              -- the pagewidth
-            Double ->         -- ^ indent of the sheet signature in
-                              -- partion of the pagewidth
-            Double ->         -- ^ line filling of the sheet signature
-            Bool ->           -- ^ parse for block quotes
-            [([g], Int, LineData)] -> -- ^ the lines and line data
-            [LineCategory g]
-byIndent _ _ _ _ _ [] = []
-byIndent parIndent custIndent sigIndent sigFill quote ((line, count, ldata):ls)
+            ByIndentOpts           -- ^ Options
+         -> [([g], Int, LineData)] -- ^ the lines and line data
+         -> [LineCategory g]
+byIndent _ [] = []
+byIndent opts ((line, count, ldata):ls)
   | (count == 1) &&
     (containsNumbers line) =
     -- TODO: head skip exceeds baseline skip
-    (Headline line):[] ++ byIndent parIndent custIndent sigIndent sigFill quote ls
+    (Headline line):[] ++ byIndent opts ls
   | (count == _line_linesOnPage ldata) &&
-    ((_line_left ldata) > custIndent * (_line_rightBorderUpperBound ldata)) =
-    (Custos line):[] ++ byIndent parIndent custIndent sigIndent sigFill quote ls
+    ((_line_left ldata) > (_byInd_custInd opts) * (_line_rightBorderUpperBound ldata)) =
+    (Custos line):[] ++ byIndent opts ls
   | (count == _line_linesOnPage ldata) &&
-    ((_line_left ldata) > sigIndent * (_line_rightBorderUpperBound ldata)) &&
-    ((fromIntegral $ _line_glyphsInLine ldata) < (sigFill * (_line_avgGlyphs ldata))) =
-    (SheetSignature line):[] ++ byIndent parIndent custIndent sigIndent sigFill quote ls
+    ((_line_left ldata) > (_byInd_sigInd opts) * (_line_rightBorderUpperBound ldata)) &&
+    ((fromIntegral $ _line_glyphsInLine ldata) <
+     ((_byInd_sigFill opts) * (_line_avgGlyphs ldata))) =
+    (SheetSignature line):[] ++ byIndent opts ls
   | (count == _line_linesOnPage ldata) &&
     (containsNumbers line) =
     -- TODO: foot skip exceeds baseline skip
-    (Footline line):[] ++ byIndent parIndent custIndent sigIndent sigFill quote ls
-  | quote &&
+    (Footline line):[] ++ byIndent opts ls
+  | (_byInd_parseQuote opts) &&
     (_line_left ldata) > (_line_leftBorderUpperBound ldata) &&
     (_line_glyphSize ldata) < (_line_glyphSizeLowerBound ldata) =
-    (BlockQuote line):[] ++ byIndent parIndent custIndent sigIndent sigFill quote ls
+    (BlockQuote line):[] ++ byIndent opts ls
   | (_line_left ldata) > (_line_leftBorderUpperBound ldata) =
-    (FirstOfParagraph line):[] ++ byIndent parIndent custIndent sigIndent sigFill quote ls
+    (FirstOfParagraph line):[] ++ byIndent opts ls
   | otherwise =
-    (DefaultLine line):[] ++ byIndent parIndent custIndent sigIndent sigFill quote ls
+    (DefaultLine line):[] ++ byIndent opts ls
 
 
 -- | Returns True if the given line of glyphs contains at least one number.
@@ -108,8 +111,22 @@ data LinearizationOpts = LinOpts
   , _linopts_prePar :: T.Text
   , _linopts_preCustos :: T.Text
   , _linopts_preSheetSig :: T.Text
-  , _linopts_quote :: T.Text
+  , _linopts_preQuote :: T.Text
   }
+
+makeLenses ''LinearizationOpts
+
+-- | Convient settings for NLP.
+nlpLike :: LinearizationOpts -> LinearizationOpts
+nlpLike opts = opts
+               -- & linopts_head .~ Part3
+               -- & linopts_foot .~ Part3
+               & linopts_custos .~ Drop2
+               & linopts_sheetSig .~ Drop2
+               & linopts_prePar .~ "\n"
+               & linopts_preSheetSig .~ ""
+               & linopts_preQuote .~ ""
+
 
 -- | Linearize a categorized line.
 --
@@ -130,7 +147,7 @@ linearizeCategorizedLine opts f (FirstOfParagraph glyphs) =
 linearizeCategorizedLine opts f (DefaultLine glyphs) =
   linearizeLine f glyphs <> "\n"
 linearizeCategorizedLine opts f (BlockQuote glyphs) =
-  _linopts_quote opts  <> linearizeLine f glyphs <> "\n"
+  _linopts_preQuote opts  <> linearizeLine f glyphs <> "\n"
 linearizeCategorizedLine LinOpts{_linopts_custos = Drop2} f (Custos glyphs) = ""
 linearizeCategorizedLine LinOpts{_linopts_custos = Keep2, _linopts_preCustos = pre}
   f (Custos glyphs) =

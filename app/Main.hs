@@ -35,6 +35,7 @@ data PdfToText = PdfToText
   , linesPerPage :: Int
   , fixedSpacingFactor :: Double
   , lineCategorizer :: LineCategorizer
+  , nlpOut :: Bool
   , inputFile :: String
   }
 
@@ -46,11 +47,7 @@ data InputMethod = PdfInput | PdfMinerXml
 
 data LineCategorizer
   = ByIndent
-    Double                      -- ^ paragraph indentation
-    Double                      -- ^ indentation of custos
-    Double                      -- ^ indentation of sheet signature
-    Double                      -- ^ line filling of sheet signature
-    Bool                        -- ^ block quotes
+    ByIndentOpts
     LinearizationOpts
   | AsDefault
     Int                         -- ^ count of headlines to drop
@@ -109,101 +106,8 @@ pdfToText_ = PdfToText
         (short 'i'
          <> long "by-indent"
          <> help "Categorize lines by their indentation. (Default)")
-        <*> option auto
-        (long "par-indent"
-          <> help "Minimal indentation of the first line of a new the paragraph. In portion of a quad or \'em\' (dt. Geviert). This is the most important parameter to tinker with."
-          <> value 3
-          <> showDefault
-          <> metavar "PARINDENT")
-        <*> option auto
-        (long "custos-indent"
-          <> help "Minimal indentation of the custos (dt. Kustode), i.e. the first syllable of the next page in the bottom line. In portion of the page width."
-          <> value 0.667
-          <> showDefault
-          <> metavar "CUSTOSINDENT")
-        <*> option auto
-        (long "sig-indent"
-          <> help "Minimal indentation of the sheet signature in portion of the page width."
-          <> value 0.05
-          <> showDefault
-          <> metavar "SIGINDENT")
-        <*> option auto
-        (long "sig-filling"
-          <> help "Maximal filling of the bottom line if it's a sheet signature."
-          <> value 0.333
-          <> showDefault
-          <> metavar "SIGFILL")
-        <*> switch
-        (long "quote-parsing"
-         <> help "Use this option if you want to parse for block quotes. (Experimental) This might interfere with the parsing for new paragraphs. The difference is that a block quote's font size is assumed to be a few smaller. But clustering for the base font size is still experimental and has no good results for gothic script.")
-        <*> (LinOpts
-             <$> ((flag Part3 Part3
-                  (long "head-keep-page"
-                   <> help "Keep only the page number found in the headline. (Default)"))
-                  <|>
-                  (flag' Drop3
-                   (long "head-drop"
-                    <> help "Drop the whole headline."))
-                  <|>
-                  (flag' Keep3
-                   (long "head-keep"
-                    <> help "Keep the whole headline.")))
-             <*> ((flag Part3 Part3
-                  (long "foot-keep-page"
-                   <> help "Keep only the page number found in the footline. (Default)"))
-                  <|>
-                  (flag' Drop3
-                   (long "foot-drop"
-                    <> help "Drop the whole footline."))
-                  <|>
-                  (flag' Keep3
-                   (long "foot-keep"
-                    <> help "Keep the whole footline.")))
-             <*> ((flag Drop2 Drop2
-                  (long "custos-drop"
-                   <> help "Drop the custos, i.e. the bottom line which contains the first syllable of the next page. (Default)"))
-                  <|>
-                  (flag' Keep2
-                   (long "custos-keep"
-                    <> help "Keep the custos.")))
-             <*> ((flag Drop2 Drop2
-                  (long "sig-drop"
-                   <> help "Drop the sheet signature in the bottom line. (Default)"))
-                  <|>
-                  (flag' Keep2
-                   (long "sig-keep"
-                    <> help "Keep the sheet signature.")))
-             <*> strOption (long "page-pre"
-                            <> help "The prefix for the page number if only the number is kept of a head- or footline."
-                            <> value "[["
-                            <> showDefault
-                            <> metavar "PAGEPRE")
-             <*> strOption (long "page-post"
-                            <> help "The postfix for the page number if only the number is kept of a head- or footline."
-                            <> value "]]"
-                            <> showDefault
-                            <> metavar "PAGEPOST")
-             <*> strOption (long "par"
-                            <> help "The prefix for linearizing the first line of a paragraph."
-                            <> value "\n\t"
-                            <> showDefault
-                            <> metavar "PAR")
-             <*> strOption (long "custos"
-                            <> help "The prefix for linearizing the custos."
-                            <> value "\t\t\t\t\t"
-                            <> showDefault
-                            <> metavar "CUSTOS")
-             <*> strOption (long "sig"
-                            <> help "The prefix for linearizing the sheet signature."
-                            <> value "\t\t\t"
-                            <> showDefault
-                            <> metavar "SIG")
-             <*> strOption (long "blockquote"
-                            <> help "The prefix for linearizing a block quote."
-                            <> value "\t\t$$"
-                            <> showDefault
-                            <> metavar "BLOCKQUOTE")
-            ))
+        <*> byIndentOpts_
+        <*> linOpts_)
        <|>
        ((flag' AsDefault
         (short 'C'
@@ -221,8 +125,117 @@ pdfToText_ = PdfToText
           <> value 0
           <> showDefault
           <> metavar "FOOTLINES")))
+  <*> switch (long "nlp"
+              <> help "Convient toggle for NLP-friendly output, i.e. categorize lines by-indent (see -C) and drop page signature, drop custos, no marking of categorized lines. This sets PAR and BLOCKQUOTE to the empty string \"\".")
   <*> argument str (metavar "INFILE"
                     <> help "Path to the input file.")
+
+
+linOpts_ :: Parser LinearizationOpts
+linOpts_ = LinOpts
+  <$> ((flag Part3 Part3
+        (long "head-keep-page"
+         <> help "Keep only the page number found in the headline. (Default)"))
+       <|>
+       (flag' Drop3
+        (long "head-drop"
+         <> help "Drop the whole headline."))
+       <|>
+       (flag' Keep3
+        (long "head-keep"
+         <> help "Keep the whole headline.")))
+  <*> ((flag Part3 Part3
+        (long "foot-keep-page"
+         <> help "Keep only the page number found in the footline. (Default)"))
+       <|>
+       (flag' Drop3
+        (long "foot-drop"
+         <> help "Drop the whole footline."))
+       <|>
+       (flag' Keep3
+        (long "foot-keep"
+         <> help "Keep the whole footline.")))
+  <*> ((flag Drop2 Drop2
+        (long "custos-drop"
+         <> help "Drop the custos, i.e. the bottom line which contains the first syllable of the next page. (Default)"))
+       <|>
+       (flag' Keep2
+        (long "custos-keep"
+         <> help "Keep the custos.")))
+  <*> ((flag Drop2 Drop2
+        (long "sig-drop"
+         <> help "Drop the sheet signature in the bottom line. (Default)"))
+       <|>
+       (flag' Keep2
+        (long "sig-keep"
+         <> help "Keep the sheet signature.")))
+  <*> strOption (long "page-pre"
+                 <> help "The prefix for the page number if only the number is kept of a head- or footline."
+                 <> value "[["
+                 <> showDefault
+                 <> metavar "PAGEPRE")
+  <*> strOption (long "page-post"
+                 <> help "The postfix for the page number if only the number is kept of a head- or footline."
+                 <> value "]]"
+                 <> showDefault
+                 <> metavar "PAGEPOST")
+  <*> strOption (long "par"
+                 <> help "The prefix for linearizing the first line of a paragraph."
+                 <> value "\n\t"
+                 <> showDefault
+                 <> metavar "PAR")
+  <*> strOption (long "custos"
+                 <> help "The prefix for linearizing the custos."
+                 <> value "\t\t\t\t\t"
+                 <> showDefault
+                 <> metavar "CUSTOS")
+  <*> strOption (long "sig"
+                 <> help "The prefix for linearizing the sheet signature."
+                 <> value "\t\t\t"
+                 <> showDefault
+                 <> metavar "SIG")
+  <*> strOption (long "blockquote"
+                 <> help "The prefix for linearizing a block quote."
+                 <> value "\t\t$$"
+                 <> showDefault
+                 <> metavar "BLOCKQUOTE")
+
+
+byIndentOpts_ :: Parser ByIndentOpts
+byIndentOpts_ = ByIndentOpts
+  <$> option auto
+  (long "par-indent"
+   <> help "Minimal indentation of the first line of a new the paragraph. In portion of a quad or \'em\' (dt. Geviert). This is the most important parameter to tinker with."
+   <> value 3
+   <> showDefault
+   <> metavar "PARINDENT")
+  <*> option auto
+  (long "custos-indent"
+   <> help "Minimal indentation of the custos (dt. Kustode), i.e. the first syllable of the next page in the bottom line. In portion of the page width."
+   <> value 0.667
+   <> showDefault
+   <> metavar "CUSTOSINDENT")
+  <*> option auto
+  (long "sig-indent"
+   <> help "Minimal indentation of the sheet signature in portion of the page width."
+   <> value 0.05
+   <> showDefault
+   <> metavar "SIGINDENT")
+  <*> option auto
+  (long "sig-filling"
+   <> help "Maximal filling of the bottom line if it's a sheet signature."
+   <> value 0.333
+   <> showDefault
+   <> metavar "SIGFILL")
+  <*> switch
+  (long "quote-parsing"
+   <> help "Use this option if you want to parse for block quotes. (Experimental) This might interfere with the parsing for new paragraphs. The difference is that a block quote's font size is assumed to be a few smaller. But clustering for the base font size is still experimental and has no good results for gothic script.")
+
+
+nlpOutput :: Bool -> LineCategorizer -> LineCategorizer
+nlpOutput False o = o
+nlpOutput True (ByIndent byIndOpts linOpts) = ByIndent byIndOpts (nlpLike linOpts)
+nlpOutput True o = o
 
 
 main :: IO ()
@@ -235,17 +248,17 @@ main = execParser opts >>= run
 
 -- | Run the extractor with the parsed command line arguments.
 run :: PdfToText -> IO ()
-run (PdfToText PdfMinerXml outputMethod pages lines' spacing' lineCategorizer' inputFile) = do
+run (PdfToText PdfMinerXml outputMethod pages lines' spacing' lineCategorizer' nlp' inputFile) = do
   case (R.parseRanges pages)::(Either R.ParseError [R.Range Int]) of
     Left err -> do
       print err
       return ()
     Right ranges -> do
       glyphs <- B.readFile inputFile >>= parseXml ranges
-      mapM (uncurry (extract outputMethod lines' spacing' lineCategorizer')) $
+      mapM (uncurry (extract outputMethod lines' spacing' (nlpOutput nlp' lineCategorizer'))) $
         zip [1..] glyphs
       return ()
-run (PdfToText _ outputMethod pages lines' spacing' lineCategorizer' inputFile) = do
+run (PdfToText _ outputMethod pages lines' spacing' lineCategorizer' nlp' inputFile) = do
   case (R.parseRanges pages)::(Either R.ParseError [R.Range Int]) of
     Left err -> do
       print err
@@ -258,7 +271,7 @@ run (PdfToText _ outputMethod pages lines' spacing' lineCategorizer' inputFile) 
         rootNode <- P.catalogPageNode catalog
         count <- P.pageNodeNKids rootNode
         let pages = map (\n -> n - 1) $ filter (R.inRanges ranges) [1 .. count]
-        mapM (extractPdfPage outputMethod lines' spacing' lineCategorizer' rootNode) pages
+        mapM (extractPdfPage outputMethod lines' spacing' (nlpOutput nlp' lineCategorizer') rootNode) pages
         return ()
 
 -- | extract a single page using the pdf-toolbox
@@ -306,10 +319,10 @@ extract Spacing' lines' _ _ page' glyphs = do
   where
     getGlyph :: Glyph g => (a, b, [g]) -> [g]
     getGlyph (_, _, g) = g
-extract _ lines' spacing' (ByIndent pi ci si sf q opts) _ glyphs = do
+extract _ lines' spacing' (ByIndent byIndOpts linOpts) _ glyphs = do
   let lines = findLinesWindow lines' 5 2 True glyphs
-  mapM (T.putStr . (linearizeCategorizedLine opts (spacingFactor spacing'))) $
-    categorizeLines (byIndent pi ci si sf q) lines
+  mapM (T.putStr . (linearizeCategorizedLine linOpts (spacingFactor spacing'))) $
+    categorizeLines (byIndent byIndOpts) lines
   T.putStr(T.singleton $ chr 12) -- add form feed at end of page
   return ()
 extract _ lines' spacing' (AsDefault headlines' footlines') _ glyphs = do
