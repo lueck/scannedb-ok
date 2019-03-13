@@ -46,31 +46,34 @@ byIndent :: Glyph g =>
             Double ->         -- ^ indent of the sheet signature in
                               -- partion of the pagewidth
             Double ->         -- ^ line filling of the sheet signature
+            Bool ->           -- ^ parse for block quotes
             [([g], Int, LineData)] -> -- ^ the lines and line data
             [LineCategory g]
-byIndent _ _ _ _ [] = []
-byIndent parIndent custIndent sigIndent sigFill ((line, count, ldata):ls)
+byIndent _ _ _ _ _ [] = []
+byIndent parIndent custIndent sigIndent sigFill quote ((line, count, ldata):ls)
   | (count == 1) &&
     (containsNumbers line) =
     -- TODO: head skip exceeds baseline skip
-    (Headline line):[] ++ byIndent parIndent custIndent sigIndent sigFill ls
+    (Headline line):[] ++ byIndent parIndent custIndent sigIndent sigFill quote ls
   | (count == _line_linesOnPage ldata) &&
     ((_line_left ldata) > custIndent * (_line_rightBorderUpperBound ldata)) =
-    (Custos line):[] ++ byIndent parIndent custIndent sigIndent sigFill ls
+    (Custos line):[] ++ byIndent parIndent custIndent sigIndent sigFill quote ls
   | (count == _line_linesOnPage ldata) &&
     ((_line_left ldata) > sigIndent * (_line_rightBorderUpperBound ldata)) &&
     ((fromIntegral $ _line_glyphsInLine ldata) < (sigFill * (_line_avgGlyphs ldata))) =
-    (SheetSignature line):[] ++ byIndent parIndent custIndent sigIndent sigFill ls
+    (SheetSignature line):[] ++ byIndent parIndent custIndent sigIndent sigFill quote ls
   | (count == _line_linesOnPage ldata) &&
     (containsNumbers line) =
     -- TODO: foot skip exceeds baseline skip
-    (Footline line):[] ++ byIndent parIndent custIndent sigIndent sigFill ls
-  | (_line_left ldata) > (_line_leftBorderUpperBound ldata) &&
+    (Footline line):[] ++ byIndent parIndent custIndent sigIndent sigFill quote ls
+  | quote &&
+    (_line_left ldata) > (_line_leftBorderUpperBound ldata) &&
     (_line_glyphSize ldata) < (_line_glyphSizeLowerBound ldata) =
-    (BlockQuote line):[] ++ byIndent parIndent custIndent sigIndent sigFill ls
+    (BlockQuote line):[] ++ byIndent parIndent custIndent sigIndent sigFill quote ls
   | (_line_left ldata) > (_line_leftBorderUpperBound ldata) =
-    (FirstOfParagraph line):[] ++ byIndent parIndent custIndent sigIndent sigFill ls
-  | otherwise = (DefaultLine line):[] ++ byIndent parIndent custIndent sigIndent sigFill ls
+    (FirstOfParagraph line):[] ++ byIndent parIndent custIndent sigIndent sigFill quote ls
+  | otherwise =
+    (DefaultLine line):[] ++ byIndent parIndent custIndent sigIndent sigFill quote ls
 
 
 -- | Returns True if the given line of glyphs contains at least one number.

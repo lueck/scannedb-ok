@@ -50,6 +50,7 @@ data LineCategorizer
     Double                      -- ^ indentation of custos
     Double                      -- ^ indentation of sheet signature
     Double                      -- ^ line filling of sheet signature
+    Bool                        -- ^ block quotes
     LinearizationOpts
   | AsDefault
     Int                         -- ^ count of headlines to drop
@@ -132,6 +133,9 @@ pdfToText_ = PdfToText
           <> value 0.333
           <> showDefault
           <> metavar "SIGFILL")
+        <*> switch
+        (long "quote-parsing"
+         <> help "Use this option if you want to parse for block quotes. (Experimental) This might interfere with the parsing for new paragraphs. The difference is that a block quote's font size is assumed to be a few smaller. But clustering for the base font size is still experimental and has no good results for gothic script.")
         <*> (LinOpts
              <$> ((flag Part3 Part3
                   (long "head-keep-page"
@@ -302,10 +306,10 @@ extract Spacing' lines' _ _ page' glyphs = do
   where
     getGlyph :: Glyph g => (a, b, [g]) -> [g]
     getGlyph (_, _, g) = g
-extract _ lines' spacing' (ByIndent pi ci si sf opts) _ glyphs = do
+extract _ lines' spacing' (ByIndent pi ci si sf q opts) _ glyphs = do
   let lines = findLinesWindow lines' 5 2 True glyphs
   mapM (T.putStr . (linearizeCategorizedLine opts (spacingFactor spacing'))) $
-    categorizeLines (byIndent pi ci si sf) lines
+    categorizeLines (byIndent pi ci si sf q) lines
   T.putStr(T.singleton $ chr 12) -- add form feed at end of page
   return ()
 extract _ lines' spacing' (AsDefault headlines' footlines') _ glyphs = do
