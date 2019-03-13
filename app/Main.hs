@@ -126,7 +126,7 @@ pdfToText_ = PdfToText
           <> showDefault
           <> metavar "FOOTLINES")))
   <*> switch (long "nlp"
-              <> help "Convient toggle for NLP-friendly output, i.e. categorize lines by-indent (see -C) and drop page signature, drop custos, no marking of categorized lines. This sets PAR and BLOCKQUOTE to the empty string \"\".")
+              <> help "Convient toggle for NLP-friendly output when categorizing lines by-indent (see -i) and drop page signature, drop custos, no indentation of categorized lines. This sets PAR to newline \"\\n\" and BLOCKQUOTE to the empty string \"\".")
   <*> argument str (metavar "INFILE"
                     <> help "Path to the input file.")
 
