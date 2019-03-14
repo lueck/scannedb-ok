@@ -5,7 +5,7 @@
 character recognition has become very good over the last years, even
 for works printed in German *black letter*, aka *Gothic letter*
 (Frakturschrift). But as long as there's is no good text extraction
-tool that can deal with the slight variances of glyph line up of
+tool that can deal with the slight variances in the glyph line up of
 scanned books, this valuable resource remains unused by text mining
 and NLP folks.
 
@@ -76,28 +76,27 @@ output of the help command.
 
 ### Inter-word spacing
 
-The PDF-Format does not even know the concept of spaces.  Adding
+The PDF-Format does not even know the concept of spaces!  Adding
 inter-word spaces turned out to work good based on a fixed factor: If
 the distance to the next glyph exceeds the product of the width and a
 fixed spacing factor, then insert a space. The factor may be changed
 with a command line argument.
 
-### Collect Glyphs of a Line
+### Collect the glyphs of a Line
 
 The glyphs of a line are collected by sliding window
 clustering. Collections of glyphs in text spans found by the pdf
-parser are ignored.
+parser are ignored; the clustering is done over the pure bag of glyphs
+of a page.
 
-The sliding window clustering algorithm outperforms k-means
-clustering, which needs the lines count before or needs finding the
-first fluctuation...
+Different from k-means clustering, the sliding window algorithm finds
+the number of clusters on its own, provided a suitable window size and
+stepping width. These may be set using a command line parameter. For
+pages with more than 42 lines it should be adjusted.
 
-The window size and stepping of the algorithm may be set using a
-command line parameter. For pages with line count above 42 it should
-be adapted.
-
-The downside of the sliding window clustering is, that the lines must
-not be too skew.
+The clustering is done on a univariate distribution: the y-coordinates
+(heights) of the glyphs' bottoms. The downside of this is that the
+lines must not be too skew.
 
 ### Categorization of lines
 
