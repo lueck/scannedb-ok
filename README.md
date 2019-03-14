@@ -59,27 +59,92 @@ This will show you the options and arguments which you can chose to
 optimize the extraction result. E.g. `1.3` has shown to be a good
 choice for the fixed spacing factor. See below for an example.
 
+## Usage
 
-## TODO/Heuristics
-### Spacing
-- clustering of inter-glyph spacing per character (I'm working
-  on that right now.)
-- space before capital letter
-- space after comma
-- care for spaced letters
+`googleb-ok` is a command line program. You definitively have to run
+
+	googleb-ok --help
+
+and read about the command line options.
+
+
+## Features / How it works / Heuristics
+
+### Inter word spacing
+
+The PDF-Format does not even know the concept of spaces.  Adding
+inter-word spaces turned out to work good based on a fixed factor: If
+the distance to the next glyph exceeds the product of the width and a
+fixed spacing factor, then insert a space. The factor may be changed
+with a command line argument.
 
 ### Collect Glyphs of a Line
-- try k-means clustering over y-axis instead of
-  moving-window-algorithm
 
-### Page Header/Footer
-- Number in Headline
-- fuzzy match the letters (but not digits) of line against other
-  headers/footers.
-- line filling < mean
+The glyphs of a line are collected by sliding window
+clustering. Collections of glyphs in text spans found by the pdf
+parser are ignored.
+
+The sliding window clustering algorithm outperforms k-means
+clustering, which needs the lines count before or needs finding the
+first fluctuation...
+
+The window size and stepping of the algorithm may be set using a
+command line parameter. For pages with line count above 42 it should
+be adapted.
+
+The downside of the sliding window clustering is, that the lines must
+not be too skew.
+
+### Categorization of lines
+
+The categorization of lines can be switched on and off. If switched
+on, the following categories of lines are parsed base on some
+heuristics:
+
+#### Page Header/Footer
+
+- first/last line of a page
+- a number is present
+- line filling << mean (TODO)
+
+#### Sheet signature (dt. Bogensignatur)
+
+- last line of a page
+- indented (adjustable by command line parameters)
+- lower font size (TODO)
+- line filling << mean (TODO)
+- number present (TODO)
+
+#### Custos (dt. Kustode)
+
+- last line of a page
+- indented to some bigger portion of the page width (adjustable by
+  command line parameters)
+
+#### New paragraph
+
+- indented
+
+#### Block quote
+
+- indented
+- lower font size
+- spans several lines with same indent (TODO)
+
+#### Default line
+
+- the rest
+
+### Dropping glyphs outside of the type area
+
+- type area (width) is determined by clustering for the start and end
+  of the most lines.
+- command line toggle for dropping
+
 
 ### Syllable division
-- Search for a unknown part of bigram overlapping a line break.
+
+- search for an unknown part of bigram overlapping a line break (TODO)
 
 
 ## Example
