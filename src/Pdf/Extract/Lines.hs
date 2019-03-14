@@ -54,7 +54,7 @@ data LineData = LineData
   , _line_glyphsInLine :: Int   -- ^ glyphs in this line
   -- | data not special to this line
   , _line_linesOnPage :: Int    -- ^ count of lines on the page
-  , _line_avgGlyphs :: Double   -- ^ average count of glyphs per line
+  , _line_maxGlyphs :: Int      -- ^ max count of glyphs per line
   , _line_leftBorderLowerBound :: Double
   , _line_leftBorderUpperBound :: Double
   , _line_linesAtLeftBorder :: Int
@@ -75,7 +75,7 @@ genLineInfo lines =
          LineData l r s c --(s/fromIntegral c) c
          -- data not special to this line
          linesCount
-         ((fromIntegral $ sumGlyphs lineTuple) / linesCountFrac)
+         mostGlyphs
          leftBorderLowerBound
          leftBorderUpperBound
          leftBorderSize
@@ -99,7 +99,6 @@ genLineInfo lines =
                       map (\g -> (xLeft g, xRight g, size g))) lines
     mostLeft = foldl1 min $ map getLeft lineTuple
     mostRight = foldl1 max $ map getRight lineTuple
-    sumGlyphs = foldl (+) 0 . map getCount
     mostGlyphs = foldl max 0 $ map getCount lineTuple
     tallestGlyph = ceiling $ foldl max 0 $ map getSize lineTuple
     getLeft (l, _, _, _) = l
@@ -107,7 +106,6 @@ genLineInfo lines =
     getSize (_, _, s, _) = s
     getCount (_, _, _, c) = c
     linesCount = length lines
-    linesCountFrac = fromIntegral $ linesCount
     -- Left Border: We assume that the non-indented lines make the
     -- biggest cluster. And the lower (right) bound of this cluster is
     -- assumed to be the left border and the upper bound is used to

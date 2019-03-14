@@ -126,7 +126,7 @@ base of the following heuristics:
 - last line of a page
 - indented (adjustable by command line parameters)
 - lower font size (TODO)
-- line filling << maximal line filling (TODO)
+- line filling << maximal line filling
 - number present (TODO)
 
 #### Custos (dt. [Kustode](https://de.wikipedia.org/wiki/Kustode_(Buchherstellung)))

@@ -218,7 +218,7 @@ byIndentOpts_ = ByIndentOpts
   <*> option auto
   (long "sig-indent"
    <> help "Minimal indentation of the sheet signature in portion of the page width."
-   <> value 0.05
+   <> value 0.0333
    <> showDefault
    <> metavar "SIGINDENT")
   <*> option auto

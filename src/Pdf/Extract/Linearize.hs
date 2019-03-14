@@ -58,23 +58,25 @@ byIndent opts ((line', count, ldata):ls)
     (containsNumbers line) =
     -- TODO: head skip exceeds baseline skip
     (Headline line):[] ++ byIndent opts ls
-  | (count == _line_linesOnPage ldata) &&
-    ((_line_left ldata) > (_byInd_custInd opts) * (_line_rightBorderUpperBound ldata)) =
+  | (count == lastLine) &&
+    indent > custInd * pageWidth &&
+    -- we also use custInd for a filling criterion:
+    (lineFill < (custFill * maxLineFill)) =
     (Custos line):[] ++ byIndent opts ls
-  | (count == _line_linesOnPage ldata) &&
-    ((_line_left ldata) > (_byInd_sigInd opts) * (_line_rightBorderUpperBound ldata)) &&
-    ((fromIntegral $ _line_glyphsInLine ldata) <
-     ((_byInd_sigFill opts) * (_line_avgGlyphs ldata))) =
+  | (count == lastLine) &&
+    indent > (_byInd_sigInd opts) * pageWidth &&
+    (lineFill < (_byInd_sigFill opts * maxLineFill)) =
     (SheetSignature line):[] ++ byIndent opts ls
-  | (count == _line_linesOnPage ldata) &&
+  | (count == lastLine) &&
     (containsNumbers line) =
     -- TODO: foot skip exceeds baseline skip
     (Footline line):[] ++ byIndent opts ls
   | (_byInd_parseQuote opts) &&
-    (_line_left ldata) > (_line_leftBorderUpperBound ldata) &&
+    -- TODO: definitively more context needed
+    indent > 0 &&
     (_line_glyphSize ldata) < (_line_glyphSizeLowerBound ldata) =
     (BlockQuote line):[] ++ byIndent opts ls
-  | (_line_left ldata) > (_line_leftBorderUpperBound ldata) =
+  | indent > 0 =
     (FirstOfParagraph line):[] ++ byIndent opts ls
   | otherwise =
     (DefaultLine line):[] ++ byIndent opts ls
@@ -84,6 +86,14 @@ byIndent opts ((line', count, ldata):ls)
            else line'
     inTypeArea = (\g -> (xLeft g >= _line_leftBorderLowerBound ldata) &&
                         (xRight g <= _line_rightBorderUpperBound ldata))
+    indent = _line_left ldata - _line_leftBorderUpperBound ldata
+    pageWidth = _line_rightBorderUpperBound ldata - _line_leftBorderLowerBound ldata
+    custFill = 1.2 - custInd -- 1 + 0.2 for secure matching
+    custInd = _byInd_custInd opts
+    lineFill = fromIntegral $ _line_glyphsInLine ldata
+    maxLineFill = fromIntegral $ _line_maxGlyphs ldata
+    lastLine = _line_linesOnPage ldata
+
 
 -- | Returns True if the given line of glyphs contains at least one number.
 containsNumbers :: Glyph g => [g] -> Bool
