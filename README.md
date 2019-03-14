@@ -70,7 +70,7 @@ and read about the command line options.
 
 ## Features / How it works / Heuristics
 
-### Inter word spacing
+### Inter-word spacing
 
 The PDF-Format does not even know the concept of spaces.  Adding
 inter-word spaces turned out to work good based on a fixed factor: If
