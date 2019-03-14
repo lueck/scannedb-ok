@@ -65,7 +65,8 @@ choice for the fixed spacing factor. See below for an example.
 
 	googleb-ok --help
 
-and read about the command line options.
+and read about the command line options. [Here](docs/usage) is the
+output of the help command.
 
 
 ## Features / How it works / Heuristics
@@ -153,7 +154,7 @@ A page from Georg Friedrich Wilhelm Hegel's *Vorlesungen über die
 Ästhetic*, edited by Hotho in 1835,
 [scanned by Google](https://books.google.de/books?id=Fss9AQAAMAAJ&hl=de):
 
-![Georg Friedrich Wilhelm Hegel: Vorlesungen über die Ästhetik. Ed. by D.H.G. Hotho, Berlin 1835, vol. 1, p. 205.](img/Heg1835a_p205.jpg)
+![Georg Friedrich Wilhelm Hegel: Vorlesungen über die Ästhetik. Ed. by D.H.G. Hotho, Berlin 1835, vol. 1, p. 205.](docs/Heg1835a_p205.jpg)
 
 
 That's the output of `googleb-ok`:
