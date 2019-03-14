@@ -27,11 +27,11 @@ parser. Right now it can read PDFs using the
 [`pdf-toolbox`](https://github.com/Yuras/pdf-toolbox) written in
 Haskell or the XML representation of a PDF document, which is yielded
 by PDFMiner's `pdf2txt.py -t xml ...` command. The results of the
-pipeline `pdfminer -t xml ... | googleb-ok -x` are very promising,
-while parsing PDFs directly with the `pdf-toolbox` still suffers from
-several deficiencies.
+pipeline `pdfminer -t xml ... | googleb-ok -x` are very promising (see
+[example](#example) below), while parsing PDFs directly with the
+`pdf-toolbox` still suffers from several deficiencies.
 
-`googleb-ok` is still under heavy development.
+`googleb-ok` is still under development.
 
 
 ## Installation
@@ -98,41 +98,54 @@ not be too skew.
 
 ### Categorization of lines
 
-The categorization of lines can be switched on and off. If switched
-on, the following categories of lines are parsed base on some
-heuristics:
+The categorization of lines can be switched on and off. By default,
+categorization is switched on. But since it is based on several
+clusterings performed for each page (left border, right border, glyph
+sizes) it slows down the app. Using the `-C` command line option for
+no categorization at all speeds things up.
+
+Right now the categorization is done on the basis of
+indentation. Categorization based on line skip will be added in future.
+
+If switched on, the following types of lines are identified on the
+base of the following heuristics:
 
 #### Page Header/Footer
 
 - first/last line of a page
-- a number is present
-- line filling << mean (TODO)
+- an arabic number is present
+- or a roman number is present (TODO)
+- line filling << maximal line filling (TODO)
+- based on command line options header/footer may be dropped, kept or
+  only the number kept
 
 #### Sheet signature (dt. Bogensignatur)
 
 - last line of a page
 - indented (adjustable by command line parameters)
 - lower font size (TODO)
-- line filling << mean (TODO)
+- line filling << maximal line filling (TODO)
 - number present (TODO)
 
-#### Custos (dt. Kustode)
+#### Custos (dt. [Kustode](https://de.wikipedia.org/wiki/Kustode_(Buchherstellung)))
 
 - last line of a page
 - indented to some bigger portion of the page width (adjustable by
   command line parameters)
 
-#### New paragraph
-
-- indented
-
 #### Block quote
+
+(still experimental and turned of by default)
 
 - indented
 - lower font size
 - spans several lines with same indent (TODO)
 
-#### Default line
+#### New paragraph
+
+- indented
+
+#### Default line (subsequent lines of a paragraph)
 
 - the rest
 
@@ -141,11 +154,28 @@ heuristics:
 - type area (width) is determined by clustering for the start and end
   of the most lines.
 - command line toggle for dropping
-
+- single glyphs above the top or be lower than the bottom line of the
+  type area are dropped by the line clustering algorithm:
+- a threshold may be defined for the line clustering algorithm. If the
+  count of glyphs in a specific height of the page falls below the
+  threshold, the glyphs are dropped (customizable by command line
+  arguments)
+- single inter-line glyphs are dropped by the same line clustering
+  algorithm
 
 ### Syllable division
 
 - search for an unknown part of bigram overlapping a line break (TODO)
+
+
+## License
+
+Licensed under either of:
+
+- [BSD-3-Clause license](https://opensource.org/licenses/BSD-3-Clause)
+- [Apache License, version 2.0](https://opensource.org/licenses/Apache-2.0)
+
+As a user, you may use this code under either license, at your option.
 
 
 ## Example
@@ -157,10 +187,9 @@ A page from Georg Friedrich Wilhelm Hegel's *Vorlesungen über die
 ![Georg Friedrich Wilhelm Hegel: Vorlesungen über die Ästhetik. Ed. by D.H.G. Hotho, Berlin 1835, vol. 1, p. 205.](docs/Heg1835a_p205.jpg)
 
 
-That's the output of `googleb-ok`:
+That's the output of `googleb-ok -x -f 1.3 -C -r 1 test/Heg1835a_p205-p207.xml`:
 
 
-	$ googleb-ok -x -f 1.3 -l 34 -r 1 test/Heg1835a_p205-p207.xml
 	178 Erſter Theil. Idee des Kunſtſchönen.
 	hören, laſſen wir wie es iſt. Die Organe des Geruchs und Ge
 	ſchmacks dagegen gehören ſchon dem Beginne des praktiſchen Ver
