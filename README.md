@@ -10,22 +10,25 @@ scanned books, this valuable resource remains unused by text mining
 and NLP folks.
 
 [`pdftotext`](https://www.xpdfreader.com/pdftotext-man.html) does a
-valuable job in text extraction, but fails with paragraphs in the
-wrong order. [`PDFMiner`](https://github.com/euske/pdfminer) performs
-much better, but suffers from problems with the inexact lineup of
-Glyphs. `googleb-ok` wants to overcome these problems. It's not
+valuable job in text extraction, but too often fails with lines or
+paragraphs in the wrong
+order. [`PDFMiner`](https://github.com/euske/pdfminer) performs much
+better, but its output suffers from the inexact lineup of Glyphs in
+scanned books. `googleb-ok` wants to overcome these problems. It's not
 intended for the extraction of tabulars, but only of a single text
 column. It wouldn't be too hard to extend it to extract two or more
 columns, though.
 
 `googleb-ok` is written in [Haskell](https://www.haskell.org/). It is
 a library and a commandline tool. It was written as a generic tool
-which can be plugged into an arbitrary PDF parser. To achieve this,
-it's functionality is defined in type classes (the most important is
-`Glyph`), which can then be instantiated by the data types of a
-parser. Right now it can read PDFs using the
+which can be plugged into an arbitrary PDF parsing library. To achieve
+this, it's functionality is defined for
+[type classes](https://www.schoolofhaskell.com/school/starting-with-haskell/introduction-to-haskell/5-type-classes)
+(the most important is [`Glyph`](src/Pdf/Extract/Glyph.hs)), which can
+then be instantiated by the data types of a parser. Right now it can
+read PDFs using the
 [`pdf-toolbox`](https://github.com/Yuras/pdf-toolbox) written in
-Haskell or the XML representation of a PDF document, which is yielded
+Haskell, or the XML representation of a PDF document, which is yielded
 by PDFMiner's `pdf2txt.py -t xml ...` command. The results of the
 pipeline `pdfminer -t xml ... | googleb-ok -x` are very promising (see
 [example](#example) below), while parsing PDFs directly with the
