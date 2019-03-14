@@ -230,7 +230,10 @@ byIndentOpts_ = ByIndentOpts
   <*> switch
   (long "quote-parsing"
    <> help "Use this option if you want to parse for block quotes. (Experimental) This might interfere with the parsing for new paragraphs. The difference is that a block quote's font size is assumed to be a few smaller. But clustering for the base font size is still experimental and has no good results for gothic script.")
-
+  <*> switch
+  (short 'M'
+   <> long "drop-margin"
+   <> help "Drop glyphs found outside of the type area. The type area is determined by a clustering algorithm which assumes that the most lines completely fill the type area horizontally. Do not use this switch, if this is not the case for your text. It may produce errors on pages with only one or two lines.")
 
 nlpOutput :: Bool -> LineCategorizer -> LineCategorizer
 nlpOutput False o = o

@@ -36,6 +36,7 @@ data ByIndentOpts = ByIndentOpts
   , _byInd_sigInd :: Double    -- ^ indent of the sheet signature in partion of the pagewidth
   , _byInd_sigFill :: Double   -- ^ line filling of the sheet signature
   , _byInd_parseQuote :: Bool  -- ^ parse for block quotes
+  , _byInd_dropMargin :: Bool  -- ^ drop glyphs outside of the type area
   }
 
 -- | Categorize lines by applying a categorization function.
@@ -52,7 +53,7 @@ byIndent :: Glyph g =>
          -> [([g], Int, LineData)] -- ^ the lines and line data
          -> [LineCategory g]
 byIndent _ [] = []
-byIndent opts ((line, count, ldata):ls)
+byIndent opts ((line', count, ldata):ls)
   | (count == 1) &&
     (containsNumbers line) =
     -- TODO: head skip exceeds baseline skip
@@ -77,7 +78,12 @@ byIndent opts ((line, count, ldata):ls)
     (FirstOfParagraph line):[] ++ byIndent opts ls
   | otherwise =
     (DefaultLine line):[] ++ byIndent opts ls
-
+  where
+    line = if _byInd_dropMargin opts
+           then filter inTypeArea line'
+           else line'
+    inTypeArea = (\g -> (xLeft g >= _line_leftBorderLowerBound ldata) &&
+                        (xRight g <= _line_rightBorderUpperBound ldata))
 
 -- | Returns True if the given line of glyphs contains at least one number.
 containsNumbers :: Glyph g => [g] -> Bool

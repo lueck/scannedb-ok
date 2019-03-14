@@ -90,13 +90,13 @@ genLineInfo lines =
   lineTuple
   where
     lineTuple :: [(Double, Double, Double, Int)]
-    lineTuple = map (foldl (\(left, right, size, count) x ->
-                               (min left $ fst x,
-                                max right $ fst x,
-                                max size $ snd x, --size + (snd x),
+    lineTuple = map (foldl (\(left, right, size, count) (l, r, s) ->
+                               (min left l,
+                                max right r,
+                                max size s,
                                 count + 1))
                       (1000, 0, 0, 0) .
-                      map (\g -> (xLeft g, size g))) lines
+                      map (\g -> (xLeft g, xRight g, size g))) lines
     mostLeft = foldl1 min $ map getLeft lineTuple
     mostRight = foldl1 max $ map getRight lineTuple
     sumGlyphs = foldl (+) 0 . map getCount
@@ -120,7 +120,7 @@ genLineInfo lines =
     leftBorderLowerBound :: Double
     leftBorderLowerBound = foldl min leftBorderUpperBound leftBorderCluster
     -- Right Border:
-    rightBorderClusters = slidingWindow1D mostGlyphs 0 False id 0 mostRight $
+    rightBorderClusters = slidingWindow1D (4 * mostGlyphs) 0 False id 0 mostRight $
                           map getRight lineTuple
     (rightBorderSize, rightBorderCluster) = longest' rightBorderClusters
     rightBorderUpperBound :: Double
@@ -146,10 +146,12 @@ printLineInfo infos = do
   putStr "Glyphs per Lines: "
   print $ map _line_glyphsInLine infos
 
-  putStr "Left border, lines starting there: "
-  print $ fromMaybe "<NA>" $ fmap (show . _line_linesAtLeftBorder) fstInfo
+  putStr "Left border (lower bound): "
+  print $ fromMaybe "<NA>" $ fmap (show . _line_leftBorderLowerBound) fstInfo
   putStr "Left border (upper bound): "
   print $ fromMaybe "<NA>" $ fmap (show . _line_leftBorderUpperBound) fstInfo
+  putStr "Count of lines starting there: "
+  print $ fromMaybe "<NA>" $ fmap (show . _line_linesAtLeftBorder) fstInfo
   putStr "Left border clusters: "
   print $ fromMaybe "<NA>" $ fmap (show . _line_leftBorderClusters) fstInfo
   putStr "Left most glyph of lines: "
