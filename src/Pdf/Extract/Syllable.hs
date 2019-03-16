@@ -21,7 +21,7 @@ repair kown acc (l:[]) = do
 repair kown acc (l:nl:ls)
   | endsWithPunctuation $ lastWord l = do
       repair kown (l:acc) (nl:ls)
-  | (kown $ lastWord l) || (kown $ firstWord nl) = do
+  | (kown $ lastWord l) && (kown $ firstWord nl) = do
       repair kown (l:acc) (nl:ls)
   | ((not $ kown $ lastWord l) || (not $ kown $ firstWord nl)) &&
     (kown (lastWord l <> firstWord nl)) = do
