@@ -43,6 +43,7 @@ library
                 , Pdf.Extract.Spacing
                 , Pdf.Extract.PyPdfMiner
                 , Pdf.Extract.PdfToolBox
+                , Pdf.Extract.Syllable
   other-modules:
                 Paths_googleb_ok
   hs-source-dirs:
@@ -60,6 +61,7 @@ library
               , mtl
               , range
               , cassava
+              , unordered-containers
   default-language: Haskell2010
 
 executable googleb-ok
@@ -86,6 +88,7 @@ executable googleb-ok
               , range
               , cassava
               , extra
+              , unordered-containers
   default-language: Haskell2010
 
 test-suite googleb-ok-test

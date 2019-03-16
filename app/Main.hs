@@ -20,6 +20,7 @@ import qualified Data.Range.Range as R
 import qualified Data.Csv as Csv
 import qualified Data.ByteString.Lazy.Char8 as C
 import Data.Tuple.Extra
+import qualified Data.HashMap.Lazy as M
 
 import Pdf.Extract.Lines
 import Pdf.Extract.Linearize
@@ -27,6 +28,8 @@ import Pdf.Extract.PdfToolBox
 import Pdf.Extract.PyPdfMiner
 import Pdf.Extract.Glyph
 import Pdf.Extract.Spacing
+import Pdf.Extract.Syllable
+
 
 data PdfToText = PdfToText
   { inputMethod :: InputMethod
@@ -39,7 +42,7 @@ data PdfToText = PdfToText
   , inputFile :: String
   }
 
-data OutputMethod = Text | NoSpaces | Info | Glyphs | Spacing'
+data OutputMethod = Text | NoSpaces | Info | Glyphs | Spacing' | Tokens
 
 
 data InputMethod = PdfInput | PdfMinerXml
@@ -84,7 +87,11 @@ pdfToText_ = PdfToText
        <|>
        (flag' Glyphs
         (long "glyphs"
-         <> help "Show the information about the glyphs found in the document.")))
+         <> help "Show the information about the glyphs found in the document."))
+       <|>
+       (flag' Tokens
+        (long "tokens"
+         <> help "Generate a list of tokens from the document.")))
   <*> strOption (short 'r'
                  <> long "pages"
                  <> help "Ranges of pages to extract. Defaults to all. Examples: 3-9 or -10 or 2,4,6,20-30,40- or \"*\" for all. Except for all do not put into quotes."
@@ -322,10 +329,19 @@ extract Spacing' lines' _ _ page' glyphs = do
   where
     getGlyph :: Glyph g => (a, b, [g]) -> [g]
     getGlyph (_, _, g) = g
-extract _ lines' spacing' (ByIndent byIndOpts linOpts) _ glyphs = do
+extract Tokens lines' spacing' _ _ glyphs = do
   let lines = findLinesWindow lines' 5 2 True glyphs
-  mapM (T.putStr . (linearizeCategorizedLine linOpts (spacingFactor spacing'))) $
-    categorizeLines (byIndent byIndOpts) lines
+      linearized = map (linearizeLine (spacingFactor spacing')) lines
+      tokens = concatMap (tokenizeMiddle) linearized
+  mapM T.putStrLn tokens
+  return ()
+extract _ lines' spacing' (ByIndent byIndOpts linOpts) _ glyphs = do
+  wordmap <- loadTokens "/home/clueck/Projekte/Beispielkorpus/Wortschatz/Heg1835a.txt"
+  let lines = findLinesWindow lines' 5 2 True glyphs
+  linearized <- repair (flip M.member wordmap) [] $
+                map (linearizeCategorizedLine linOpts (spacingFactor spacing')) $
+                categorizeLines (byIndent byIndOpts) lines
+  mapM T.putStr linearized
   T.putStr(T.singleton $ chr 12) -- add form feed at end of page
   return ()
 extract _ lines' spacing' (AsDefault headlines' footlines') _ glyphs = do
