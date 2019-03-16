@@ -224,7 +224,6 @@ into a log file.
 
 Here is the output:
 
-
 	[[178]] hören, laſſen wir wie es iſt. Die Organe des Geruchs und Geſchmacks
 	dagegen gehören ſchon dem Beginne des praktiſchen Verhältniſſes
 	an. Denn zu riechen iſt nur dasjenige, was ſchon im
@@ -237,7 +236,7 @@ Here is the output:
 	mächtigung und praktiſche Verändrung der äußeren Objekte,
 	Beine und Arme.
 
-	    Auch im Organiſchen alſo hat die Regelmäßigkeit ihr be
+        Auch im Organiſchen alſo hat die Regelmäßigkeit ihr be
 	griffsgemäßes Recht, aber nur bei den Gliedern, welche die Werk
 	zeuge für den unmittelbaren Bezug auf die Außenwelt abgeben,
 	und nicht den Bezug des Organismus auf ſich ſelbſt als in ſich
@@ -249,14 +248,14 @@ Here is the output:
 
         Näher nun aber von dieſer abſtrakteren Form iſt
 
-        b) die Geſetzmäßigkeit
+        b) die Geſetzmäßigkeit  
 	zu unterſcheiden, inſofern ſie ſchon auf einer höheren Stufe ſteht,
 	und den Uebergang zu der Freiheit des Lebendigen, ſowohl des
-	natürlichen als auch des geiſtigen, ausmacht. Für ſich jedoch be
-	trachtet iſt die Geſetzmäßigkeit zwar noch nicht die ſubjektive to
-	tale Einheit und Freiheit ſelber, doch iſt ſie bereits eine Totalität
-	weſentlicher Unterſchiede, welche nicht nur als Unter
-	ſchiede und Gegenſätze ſich hervorkehren, ſondern in ihrer Totalität
+	natürlichen als auch des geiſtigen, ausmacht. Für ſich jedoch betrachtet
+	iſt die Geſetzmäßigkeit zwar noch nicht die ſubjektive totale
+	Einheit und Freiheit ſelber, doch iſt ſie bereits eine Totalität
+	weſentlicher Unterſchiede, welche nicht nur als Unterſchiede
+	und Gegenſätze ſich hervorkehren, ſondern in ihrer Totalität
 	Einheit und Zuſammenhang zeigen. Solche geſetzmäßige
 	Einheit und ihre Herrſchaft, obſchon ſie noch im Quan
 	titativen ſich geltend macht, iſt nicht mehr auf an ſich ſelbſt äußerliche
@@ -264,20 +263,36 @@ Here is the output:
 	zuführen, ſondern läßt ſchon ein qualitatives Verhalten der
 
 
+
 As you can see, some lines have gotten longer--because the syllable
 division has been repaired. The log file reports this:
 
+
 	Joining "Ge" and "ſchmacks".
-	Joining "Ver" and "hältniſſes". 
+	Joining "Ver" and "hältniſſes".
+	Unable to repair: "im" and "Sichverzehren".
+	Unable to repair: "iſt" and "zweigetheilt".
 	Joining "regel" and "mäßig".
+	Unable to repair: "und" and "Ohren,".
+	Unable to repair: "Be" and "mächtigung".
+	Unable to repair: "be" and "griffsgemäßes".
+	Unable to repair: "Werk" and "zeuge".
+	Unable to repair: "ſich" and "zurückkehrende".
+	Unable to repair: "den" and "Naturerſcheinungen.
+	".
+	Unable to repair: "iſt" and "b)".
+	Joining "be" and "trachtet".
+	Joining "to" and "tale".
 	Joining "Tota" and "lität".
+	Joining "Unter" and "ſchiede".
 	Joining "To" and "talität".
 	Joining "geſetz" and "mäßige".
 	Unable to repair: "Quan" and "titativen".
 	Joining "äu" and "ßerliche".
+	Unable to repair: "zurück" and "zuführen,".
 
-`Quantitativen` was not in the word pool, so the bigram wasn't joined
-together.
+`Quantitativen` and `Bemächtigung` were not in the word pool, so the
+bigrams weren't joined together.
 
 If you use the `-C` option, you will get a pure linearization, without
 line categorization. Comparing the outputs you can see that an capital
