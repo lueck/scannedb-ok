@@ -89,6 +89,7 @@ executable googleb-ok
               , cassava
               , extra
               , unordered-containers
+              , ansi-wl-pprint
   default-language: Haskell2010
 
 test-suite googleb-ok-test

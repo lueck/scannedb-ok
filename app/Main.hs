@@ -21,6 +21,7 @@ import qualified Data.Csv as Csv
 import qualified Data.ByteString.Lazy.Char8 as C
 import Data.Tuple.Extra
 import qualified Data.HashMap.Lazy as M
+import qualified Text.PrettyPrint.ANSI.Leijen as PP
 
 import Pdf.Extract.Lines
 import Pdf.Extract.Linearize
@@ -31,6 +32,9 @@ import Pdf.Extract.Spacing
 import Pdf.Extract.Syllable
 
 
+-- * Parsing command line arguments
+
+-- | A record for command line arguments
 data PdfToText = PdfToText
   { inputMethod :: InputMethod
   , outputMethod :: OutputMethod
@@ -42,19 +46,32 @@ data PdfToText = PdfToText
   , inputFile :: String
   }
 
+-- | A record for the output command line argument 
 data OutputMethod = Text | NoSpaces | Info | Glyphs | Spacing' | Tokens
 
 
+-- | A record for the input type command line argument 
 data InputMethod = PdfInput | PdfMinerXml
 
 
+-- | A record for the command line arguments on categorizing lines
 data LineCategorizer
   = ByIndent
     ByIndentOpts
     LinearizationOpts
+    SyllableRepair
   | AsDefault
     Int                         -- ^ count of headlines to drop
     Int                         -- ^ count of footlines to drop
+
+
+-- | A record for the output command line arguments on repairing
+-- syllable division
+data SyllableRepair = SylRepair
+  { tokensFile :: Maybe FilePath
+  , divisionMark :: Char
+  }
+
 
 -- | A parser for the command line arguments.
 pdfToText_ :: Parser PdfToText
@@ -114,7 +131,8 @@ pdfToText_ = PdfToText
          <> long "by-indent"
          <> help "Categorize lines by their indentation. (Default)")
         <*> byIndentOpts_
-        <*> linOpts_)
+        <*> linOpts_
+        <*> syllableRepair_)
        <|>
        ((flag' AsDefault
         (short 'C'
@@ -242,9 +260,25 @@ byIndentOpts_ = ByIndentOpts
    <> long "drop-margin"
    <> help "Drop glyphs found outside of the type area. The type area is determined by a clustering algorithm which assumes that the most lines completely fill the type area horizontally. Do not use this switch, if this is not the case for your text. It may produce errors on pages with only one or two lines.")
 
+syllableRepair_ :: Parser SyllableRepair
+syllableRepair_ = SylRepair
+  <$> optional (strOption
+  (short 'w'
+   <> long "word-pool"
+   <> help "If a path to file with a pool of words (tokens) is given, syllable division is repaired in the text output, but only when line categorization is turned on."
+   <> metavar "WORDPOOL"))
+  <*> option auto
+  (long "syllable-sep"
+   <> help "The division mark for syllable division at the line end."
+   <> value '-'
+   <> showDefault
+   <> hidden)
+
+
 nlpOutput :: Bool -> LineCategorizer -> LineCategorizer
 nlpOutput False o = o
-nlpOutput True (ByIndent byIndOpts linOpts) = ByIndent byIndOpts (nlpLike linOpts)
+nlpOutput True (ByIndent byIndOpts linOpts sylOpts) =
+  ByIndent byIndOpts (nlpLike linOpts) sylOpts
 nlpOutput True o = o
 
 
@@ -252,7 +286,8 @@ main :: IO ()
 main = execParser opts >>= run
   where opts = info (helper <*> pdfToText_)
           ( fullDesc
-            <> progDesc "googleb-ok extracts the text from a PDF and was written to work for scanned books from books.google.com. There are options for stripping of page headers and footers in order to make the pure text ready for text mining and NLP."
+            <> progDesc
+            "googleb-ok extracts the text from a PDF and was written to work for scanned books from books.google.com. There are options for stripping of page headers and footers in order to make the pure text ready for text mining and NLP.\n\nTake care of the parentheses, square brackets and pipes in the usage note. Parentheses group options together, the pipe divides (groups of options) into alternatives. Square brackets mean that the option is optional.\n\nThere are two input formats, pdf and xml. There are six output formats: --text which is the default, --no-spaces for scriptura continua, --statistics for information on each page, --spacing for csv output with information on glyphs an inter-glyph spacing, --glyphs for an internal representation of glyphs, --tokens for output of a list of words which can be reused for repairing syllable divisions. There are two modes of line detection: -i for categorization of lines into headline, footline etc., -C for no such categorization at all. These modes have various options."
             <> header "googleb-ok - extract text from a PDF, even scanned books." )
 
 
@@ -335,12 +370,15 @@ extract Tokens lines' spacing' _ _ glyphs = do
       tokens = concatMap (tokenizeMiddle) linearized
   mapM T.putStrLn tokens
   return ()
-extract _ lines' spacing' (ByIndent byIndOpts linOpts) _ glyphs = do
-  wordmap <- loadTokens "/home/clueck/Projekte/Beispielkorpus/Wortschatz/Heg1835a.txt"
-  let lines = findLinesWindow lines' 5 2 True glyphs
-  linearized <- repair (flip M.member wordmap) [] $
-                map (linearizeCategorizedLine linOpts (spacingFactor spacing')) $
-                categorizeLines (byIndent byIndOpts) lines
+extract _ lines' spacing' (ByIndent byIndOpts linOpts sylOpts) _ glyphs = do
+  let lines = map (linearizeCategorizedLine linOpts (spacingFactor spacing')) $
+              categorizeLines (byIndent byIndOpts) $
+              findLinesWindow lines' 5 2 True glyphs
+  linearized <- if (isJust $ tokensFile sylOpts)
+                then loadTokens (fromMaybe "/dev/null" $ tokensFile sylOpts) >>=
+                     \ws -> repair (flip M.member ws) [] lines
+                     -- /dev/null is never loaded, because of if condition
+                else return lines
   mapM T.putStr linearized
   T.putStr(T.singleton $ chr 12) -- add form feed at end of page
   return ()
