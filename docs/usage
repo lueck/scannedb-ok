@@ -1,22 +1,34 @@
 googleb-ok - extract text from a PDF, even scanned books.
 
 Usage: googleb-ok ([-p|--pdf] | [-x|--xml]) ([-t|--text] | [--no-spaces] |
-                  [--statistics] | [--spacing] | [--glyphs]) [-r|--pages PAGES]
-                  [-l|--lines-per-page LINES] [-f|--spacing-factor SPACING]
-                  ([-i|--by-indent] [--par-indent PARINDENT]
-                  [--custos-indent CUSTOSINDENT] [--sig-indent SIGINDENT]
-                  [--sig-filling SIGFILL] [--quote-parsing] [-M|--drop-margin]
-                  ([--head-keep-page] | [--head-drop] | [--head-keep])
-                  ([--foot-keep-page] | [--foot-drop] | [--foot-keep])
-                  ([--custos-drop] | [--custos-keep]) ([--sig-drop] |
-                  [--sig-keep]) [--page-pre PAGEPRE] [--page-post PAGEPOST]
-                  [--par PAR] [--custos CUSTOS] [--sig SIG]
-                  [--blockquote BLOCKQUOTE] | [-C|--no-categorization]
+                  [--statistics] | [--spacing] | [--glyphs] | [--tokens])
+                  [-r|--pages PAGES] [-l|--lines-per-page LINES]
+                  [-f|--spacing-factor SPACING] ([-i|--by-indent]
+                  [--par-indent PARINDENT] [--custos-indent CUSTOSINDENT]
+                  [--sig-indent SIGINDENT] [--sig-filling SIGFILL]
+                  [--quote-parsing] [-M|--drop-margin] ([--head-keep-page] |
+                  [--head-drop] | [--head-keep]) ([--foot-keep-page] |
+                  [--foot-drop] | [--foot-keep]) ([--custos-drop] |
+                  [--custos-keep]) ([--sig-drop] | [--sig-keep])
+                  [--page-pre PAGEPRE] [--page-post PAGEPOST] [--par PAR]
+                  [--custos CUSTOS] [--sig SIG] [--blockquote BLOCKQUOTE]
+                  [-w|--word-pool WORDPOOL] | [-C|--no-categorization]
                   [--headlines HEADLINES] [--footlines FOOTLINES]) [--nlp]
                   INFILE
   googleb-ok extracts the text from a PDF and was written to work for scanned
   books from books.google.com. There are options for stripping of page headers
-  and footers in order to make the pure text ready for text mining and NLP.
+  and footers in order to make the pure text ready for text mining and NLP. Take
+  care of the parentheses, square brackets and pipes in the usage note.
+  Parentheses group options together, the pipe divides (groups of options) into
+  alternatives. Square brackets mean that the option is optional. There are two
+  input formats, pdf and xml. There are six output formats: --text which is the
+  default, --no-spaces for scriptura continua, --statistics for information on
+  each page, --spacing for csv output with information on glyphs an inter-glyph
+  spacing, --glyphs for an internal representation of glyphs, --tokens for
+  output of a list of words which can be reused for repairing syllable
+  divisions. There are two modes of line detection: -i for categorization of
+  lines into headline, footline etc., -C for no such categorization at all.
+  These modes have various options.
 
 Available options:
   -h,--help                Show this help text
@@ -32,6 +44,7 @@ Available options:
                            analysis. This generates CSV output.
   --glyphs                 Show the information about the glyphs found in the
                            document.
+  --tokens                 Generate a list of tokens from the document.
   -r,--pages PAGES         Ranges of pages to extract. Defaults to all.
                            Examples: 3-9 or -10 or 2,4,6,20-30,40- or "*" for
                            all. Except for all do not put into quotes.
@@ -54,7 +67,7 @@ Available options:
                            the first syllable of the next page in the bottom
                            line. In portion of the page width. (default: 0.667)
   --sig-indent SIGINDENT   Minimal indentation of the sheet signature in portion
-                           of the page width. (default: 5.0e-2)
+                           of the page width. (default: 3.33e-2)
   --sig-filling SIGFILL    Maximal filling of the bottom line if it's a sheet
                            signature. (default: 0.333)
   --quote-parsing          Use this option if you want to parse for block
@@ -96,6 +109,12 @@ Available options:
                            signature. (default: "\t\t\t")
   --blockquote BLOCKQUOTE  The prefix for linearizing a block
                            quote. (default: "\t\t$$")
+  -w,--word-pool WORDPOOL  If a path to file with a pool of words (tokens) is
+                           given, syllable division is repaired in the text
+                           output, but only when line categorization is turned
+                           on.
+  --syllable-sep ARG       The division mark for syllable division at the line
+                           end. (default: '-')
   -C,--no-categorization   Do not categorize the lines at all.
   --headlines HEADLINES    Count of lines in the page header to be
                            dropped. (default: 0)
