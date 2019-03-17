@@ -208,7 +208,7 @@ A page from Georg Friedrich Wilhelm Hegel's *Vorlesungen über die
 
 We use PDFMiner to generate an xml representation of the document's
 glyphs first. Then we create a word pool without the document header
-and books table of contents which isn't linearized in an acceptable
+and table of contents which isn't linearized in an acceptable
 way. Then we linearize page 205 of the PDF, which is page 178 of the
 book. We use the word pool as a vocabulary for repairing the syllable
 division at the line breaks. The `-M` switch drops glyphs outside of
@@ -293,13 +293,16 @@ division has been repaired. The log file reports this:
 	Joining "äu" and "ßerliche".
 	Unable to repair: "zurück" and "zuführen,".
 
-`Quantitativen` and `Bemächtigung` were not in the word pool, so the
-bigrams weren't joined together.
+`Quantitativen` and `Bemächtigung` and `begriffsmäſiges` were not in
+the word pool, so the bigrams weren't joined together. It's important
+to understand [Zipf's law](https://en.wikipedia.org/wiki/Zipf%27s_law)
+in this context: You definitively need a better, i.e. bigger word
+list.
 
 If you use the `-C` option, you will get a pure linearization, without
 line categorization. Comparing the outputs you can see that an capital
-`Y`, which was fail-OCRed in the book binding, was dropped by the `-M`
-option.
+`Y` in the last line, which was fail-OCRed in the book binding, was
+dropped by the `-M` option.
 
 That's the output of `googleb-ok -x -C -r 205 Heg1835a.xml`:
 
