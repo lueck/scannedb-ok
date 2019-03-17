@@ -1,3 +1,3 @@
-# Changelog for googleb-ok
+# Changelog for scannedb-ok
 
 ## Unreleased changes

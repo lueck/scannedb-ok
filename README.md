@@ -1,6 +1,6 @@
-# googleb-ok
+# scannedb-ok
 
-`googleb-ok` extracts text from a PDF and was written with
+`scannedb-ok` extracts text from a PDF and was written with
 [Google Books](http://books.google.com) in mind. Google's optical
 character recognition has become very good over the last years, even
 for works printed in German *black letter*, aka *Gothic letter*
@@ -16,7 +16,7 @@ order. [`PDFMiner`](https://github.com/euske/pdfminer) performs much
 better, but its output suffers from the inexact lineup of Glyphs in
 scanned books. In addition, it's hardly possible to identify page
 headers, sheet signatures etc. when the PDF has already been
-linearized to plain text. `googleb-ok` wants to overcome these
+linearized to plain text. `scannedb-ok` wants to overcome these
 problems. It's not intended for the extraction of tabulars, but only
 of a single text column. It wouldn't be too hard to extend it to
 extract two or more columns, though.
@@ -37,7 +37,7 @@ extract two or more columns, though.
 	- statistics about each page
 	- a csv with coordinates of glyphs for further analysis
 
-`googleb-ok` is written in [Haskell](https://www.haskell.org/). It is
+`scannedb-ok` is written in [Haskell](https://www.haskell.org/). It is
 a library and a commandline tool. It was written as a generic tool
 which can be plugged into an arbitrary PDF parsing library. To achieve
 this, it's functionality is defined for
@@ -48,11 +48,11 @@ read PDFs using the
 [`pdf-toolbox`](https://github.com/Yuras/pdf-toolbox) written in
 Haskell, or the XML representation of a PDF document, which is yielded
 by PDFMiner's `pdf2txt.py -t xml ...` command. The results of the
-pipeline `pdfminer -t xml ... | googleb-ok -x` are very promising (see
+pipeline `pdfminer -t xml ... | scannedb-ok -x` are very promising (see
 [example](#example) below), while parsing PDFs directly with the
 `pdf-toolbox` still suffers from several deficiencies.
 
-`googleb-ok` is still under development.
+`scannedb-ok` is still under development.
 
 
 ## Installation
@@ -62,19 +62,19 @@ the haskell build tool, is required.
 
 1. Clone this repository
 2. Clone [`pdf-toolbox`](https://github.com/Yuras/pdf-toolbox) so
-   that it lives in the same directory as `googleb-ok`.
-3. `cd` into the `googleb-ok` directory and run
+   that it lives in the same directory as `scannedb-ok`.
+3. `cd` into the `scannedb-ok` directory and run
 
 		stack setup
 		stack build
 		stack install # optional
 
 The build command will take a while. The first 2 commands will not
-install anything outside the `googleb-ok` folder. If you want to test
+install anything outside the `scannedb-ok` folder. If you want to test
 the app before the installation, then leave out the last step and try
-the commandline tool from the `googleb-ok` directory using
+the commandline tool from the `scannedb-ok` directory using
 
-	stack exec -- googleb-ok --help
+	stack exec -- scannedb-ok --help
 
 This will show you the options and arguments which you can chose to
 optimize the extraction result. E.g. `1.3` has shown to be a good
@@ -82,9 +82,9 @@ choice for the fixed spacing factor. See below for an example.
 
 ## Usage
 
-`googleb-ok` is a command line program. You definitively have to run
+`scannedb-ok` is a command line program. You definitively have to run
 
-	googleb-ok --help
+	scannedb-ok --help
 
 and read about the command line options. [Here](docs/usage) is the
 output of the help command.
@@ -238,8 +238,8 @@ Heg1835a.log` redirects the logging information printed to
 into a log file.
 
 	pdf2txt.py -t xml Heg1835a.pdf > Heg1835a.xml
-	googleb-ok -x -r 30-574 -M --tokens Heg1835.xml > wordpool.txt
-	googleb-ok -x -r 205 -M -w wordpool.txt Heg1835a.xml 2> Heg1835a.log
+	scannedb-ok -x -r 30-574 -M --tokens Heg1835.xml > wordpool.txt
+	scannedb-ok -x -r 205 -M -w wordpool.txt Heg1835a.xml 2> Heg1835a.log
 
 
 Here is the output:
@@ -322,7 +322,7 @@ line categorization. Comparing the outputs you can see that an capital
 `Y` in the last line, which was fail-OCRed in the book binding, was
 dropped by the `-M` option.
 
-That's the output of `googleb-ok -x -C -r 205 Heg1835a.xml`:
+That's the output of `scannedb-ok -x -C -r 205 Heg1835a.xml`:
 
 
 	178 Erſter Theil. Idee des Kunſtſchönen.
