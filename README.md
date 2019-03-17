@@ -14,10 +14,28 @@ valuable job in text extraction, but too often fails with lines or
 paragraphs in the wrong
 order. [`PDFMiner`](https://github.com/euske/pdfminer) performs much
 better, but its output suffers from the inexact lineup of Glyphs in
-scanned books. `googleb-ok` wants to overcome these problems. It's not
+scanned books. In addition, it's hardly possible to identify page
+headers, sheet signatures etc. when the PDF is already linearized to
+plain text. `googleb-ok` wants to overcome these problems. It's not
 intended for the extraction of tabulars, but only of a single text
 column. It wouldn't be too hard to extend it to extract two or more
 columns, though.
+
+# Features
+
+- collects glyphs of each line by a clustering algorithm
+- inserts inter-word spaces based on adjustable factors
+- drops glyphs outside of the type area
+- drops single glyphs between lines
+- identifies types of lines: e.g. first line of paragraph, page
+  header and footer, sheet signature etc.
+- options for formatting (indenting) these line types
+- repair syllable division at line breaks
+- besides plain text output, it can generate
+	- a word pool for repairing syllable divisions
+	- scriptura continua
+	- statistics about each page
+	- a csv with coordinates of glyphs for further analysis
 
 `googleb-ok` is written in [Haskell](https://www.haskell.org/). It is
 a library and a commandline tool. It was written as a generic tool
@@ -72,7 +90,7 @@ and read about the command line options. [Here](docs/usage) is the
 output of the help command.
 
 
-## Features / How it works / Heuristics
+## How it works / Heuristics
 
 ### Inter-word spacing
 
