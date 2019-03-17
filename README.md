@@ -15,13 +15,13 @@ paragraphs in the wrong
 order. [`PDFMiner`](https://github.com/euske/pdfminer) performs much
 better, but its output suffers from the inexact lineup of Glyphs in
 scanned books. In addition, it's hardly possible to identify page
-headers, sheet signatures etc. when the PDF is already linearized to
-plain text. `googleb-ok` wants to overcome these problems. It's not
-intended for the extraction of tabulars, but only of a single text
-column. It wouldn't be too hard to extend it to extract two or more
-columns, though.
+headers, sheet signatures etc. when the PDF has already been
+linearized to plain text. `googleb-ok` wants to overcome these
+problems. It's not intended for the extraction of tabulars, but only
+of a single text column. It wouldn't be too hard to extend it to
+extract two or more columns, though.
 
-# Features
+## Features
 
 - collects glyphs of each line by a clustering algorithm
 - inserts inter-word spaces based on adjustable factors
@@ -29,9 +29,9 @@ columns, though.
 - drops single glyphs between lines
 - identifies types of lines: e.g. first line of paragraph, page
   header and footer, sheet signature etc.
-- options for formatting (indenting) these line types
-- repair syllable division at line breaks
-- besides plain text output, it can generate
+- gives options for formatting (indenting) these line types
+- repairs syllable division at line breaks
+- besides plain text output, can generates
 	- a word pool for repairing syllable divisions
 	- scriptura continua
 	- statistics about each page
