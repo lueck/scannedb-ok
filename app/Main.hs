@@ -364,10 +364,19 @@ extract Spacing' lines' _ _ page' glyphs = do
   where
     getGlyph :: Glyph g => (a, b, [g]) -> [g]
     getGlyph (_, _, g) = g
-extract Tokens lines' spacing' _ _ glyphs = do
-  let lines = findLinesWindow lines' 5 2 True glyphs
-      linearized = map (linearizeLine (spacingFactor spacing')) lines
-      tokens = concatMap (tokenizeMiddle) linearized
+extract Tokens lines' spacing' (ByIndent byIndOpts linOpts sylOpts) _ glyphs = do
+  let tokens = concatMap (tokenizeMiddle) $
+               map (linearizeCategorizedLine linOpts (spacingFactor spacing')) $
+               categorizeLines (byIndent byIndOpts) $
+               findLinesWindow lines' 5 2 True glyphs
+  mapM T.putStrLn tokens
+  return ()
+extract Tokens lines' spacing' (AsDefault headlines' footlines') _ glyphs = do
+  let tokens = concatMap (tokenizeMiddle) $
+               map (linearizeLine (spacingFactor spacing')) $
+               drop headlines' $
+               dropFoot footlines' $
+               findLinesWindow lines' 5 2 True glyphs
   mapM T.putStrLn tokens
   return ()
 extract _ lines' spacing' (ByIndent byIndOpts linOpts sylOpts) _ glyphs = do

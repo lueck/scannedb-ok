@@ -212,13 +212,15 @@ and books table of contents which isn't linearized in an acceptable
 way. Then we linearize page 205 of the PDF, which is page 178 of the
 book. We use the word pool as a vocabulary for repairing the syllable
 division at the line breaks. The `-M` switch drops glyphs outside of
-the type area. `2> Heg1835a.log` redirects the logging information
-printed to
+the type area, and it's import to use it in the generation of the word
+pool because failed glyphs from the area of the book binding would
+disturb the dropping of the bigrams around line breaks. `2>
+Heg1835a.log` redirects the logging information printed to
 [`stderr`](https://en.wikipedia.org/wiki/Standard_streams#Standard_error_(stderr))
 into a log file.
 
 	pdf2txt.py -t xml Heg1835a.pdf > Heg1835a.xml
-	googleb-ok -x -r 30-574 --tokens Heg1835.xml > wordpool.txt
+	googleb-ok -x -r 30-574 -M --tokens Heg1835.xml > wordpool.txt
 	googleb-ok -x -r 205 -M -w wordpool.txt Heg1835a.xml 2> Heg1835a.log
 
 
