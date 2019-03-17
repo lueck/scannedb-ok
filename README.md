@@ -311,11 +311,11 @@ division has been repaired. The log file reports this:
 	Joining "äu" and "ßerliche".
 	Unable to repair: "zurück" and "zuführen,".
 
-`Quantitativen` and `Bemächtigung` and `begriffsmäſiges` were not in
-the word pool, so the bigrams weren't joined together. It's important
-to understand [Zipf's law](https://en.wikipedia.org/wiki/Zipf%27s_law)
-in this context: You definitively need a better, i.e. bigger word
-list.
+`Quantitativen`, `Bemächtigung`, `begriffsmäſiges`, `Werkzeuge`, and
+`zurückzuführen` were not in the word pool, so the bigrams weren't
+joined together. It's important to understand
+[Zipf's law](https://en.wikipedia.org/wiki/Zipf%27s_law) in this
+context: You definitively need a better, i.e. bigger word list.
 
 If you use the `-C` option, you will get a pure linearization, without
 line categorization. Comparing the outputs you can see that an capital
