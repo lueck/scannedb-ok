@@ -4,7 +4,6 @@ module Main where
 import Test.Framework
 import Test.Framework.BlackBoxTest
 import {-@ HTF_TESTS @-} Test.Pdf.Extract.Syllable
+import {-@ HTF_TESTS @-} Test.Pdf.Extract.PyPdfMiner
 
 main = htfMain htf_importedTests
--- main :: IO ()
--- main = putStrLn "Test suite not yet implemented"
