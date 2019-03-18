@@ -97,10 +97,28 @@ test-suite scannedb-ok-test
   main-is: Spec.hs
   other-modules:
                 Paths_scannedb_ok
+              , Test.Pdf.Extract.Syllable
   hs-source-dirs:
                 test
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
+                scannedb-ok
+              , HTF
+  build-depends:
                 base >=4.7 && <5
-              , scannedb-ok
+              , pdf-toolbox-core
+              , pdf-toolbox-content
+              , pdf-toolbox-document == 0.1.*
+              , split
+              , text
+              , xeno
+              , bytestring
+              , lens
+              , mtl
+              , optparse-applicative
+              , range
+              , cassava
+              , extra
+              , unordered-containers
+              , ansi-wl-pprint
   default-language: Haskell2010

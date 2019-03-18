@@ -385,7 +385,7 @@ extract _ lines' spacing' (ByIndent byIndOpts linOpts sylOpts) _ glyphs = do
               findLinesWindow lines' 5 2 True glyphs
   linearized <- if (isJust $ tokensFile sylOpts)
                 then loadTokens (fromMaybe "/dev/null" $ tokensFile sylOpts) >>=
-                     \ws -> repair (flip M.member ws) [] lines
+                     \ws -> repair (flip M.member ws) True [] lines
                      -- /dev/null is never loaded, because of if condition
                 else return lines
   mapM T.putStr linearized
