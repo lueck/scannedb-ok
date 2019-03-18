@@ -141,6 +141,26 @@ test_repair_punctuationAfterFirstWordInNextLineWithDash = do
   assertEqual lines6r lf
 
 
+lines7 = [ "", "", "" , "non-empty", "" ]
+
+test_repair_emptyLines = do
+  lt <- repair' True [] lines7
+  assertEqual lines7 lt
+  lf <- repair' False [] lines7
+  assertEqual lines7 lf
+
+
+lines8 = [ "", "\t\n\f", "" , "Gesch-\n\n\f", "\t  macks", "" ]
+lines8r = [ "", "\t\n\f", "" , "Geschmacks\n\n\f", "", "" ]
+
+test_repair_skewLines = do
+  lt <- repair' True [] lines8
+  assertEqual lines8r lt
+  lf <- repair' False [] lines8
+  assertEqual lines8r lf
+
+
+
 linesX = [ "Donau-\n"
          , "dampf-\n"
          , "schiff-\n"
