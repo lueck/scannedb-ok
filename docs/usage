@@ -1,21 +1,21 @@
-googleb-ok - extract text from a PDF, even scanned books.
+scannedb-ok - extract text from a PDF, even scanned books.
 
-Usage: googleb-ok ([-p|--pdf] | [-x|--xml]) ([-t|--text] | [--no-spaces] |
-                  [--statistics] | [--spacing] | [--glyphs] | [--tokens])
-                  [-r|--pages PAGES] [-l|--lines-per-page LINES]
-                  [-f|--spacing-factor SPACING] ([-i|--by-indent]
-                  [--par-indent PARINDENT] [--custos-indent CUSTOSINDENT]
-                  [--sig-indent SIGINDENT] [--sig-filling SIGFILL]
-                  [--quote-parsing] [-M|--drop-margin] ([--head-keep-page] |
-                  [--head-drop] | [--head-keep]) ([--foot-keep-page] |
-                  [--foot-drop] | [--foot-keep]) ([--custos-drop] |
-                  [--custos-keep]) ([--sig-drop] | [--sig-keep])
-                  [--page-pre PAGEPRE] [--page-post PAGEPOST] [--par PAR]
-                  [--custos CUSTOS] [--sig SIG] [--blockquote BLOCKQUOTE]
-                  [-w|--word-pool WORDPOOL] | [-C|--no-categorization]
-                  [--headlines HEADLINES] [--footlines FOOTLINES]) [--nlp]
-                  INFILE
-  googleb-ok extracts the text from a PDF and was written to work for scanned
+Usage: scannedb-ok ([-p|--pdf] | [-x|--xml]) ([-t|--text] | [--no-spaces] |
+                   [--statistics] | [--spacing] | [--glyphs] | [--tokens])
+                   [-r|--pages PAGES] [-l|--lines-per-page LINES]
+                   [-f|--spacing-factor SPACING] ([-i|--by-indent]
+                   [--par-indent PARINDENT] [--custos-indent CUSTOSINDENT]
+                   [--sig-indent SIGINDENT] [--sig-filling SIGFILL]
+                   [--quote-parsing] [-M|--drop-margin] ([--head-keep-page] |
+                   [--head-drop] | [--head-keep]) ([--foot-keep-page] |
+                   [--foot-drop] | [--foot-keep]) ([--custos-drop] |
+                   [--custos-keep]) ([--sig-drop] | [--sig-keep])
+                   [--page-pre PAGEPRE] [--page-post PAGEPOST] [--par PAR]
+                   [--custos CUSTOS] [--sig SIG] [--blockquote BLOCKQUOTE]
+                   [-w|--word-pool WORDPOOL] [-D|--no-division-mark-required] |
+                   [-C|--no-categorization] [--headlines HEADLINES]
+                   [--footlines FOOTLINES]) [--nlp] INFILE
+  scannedb-ok extracts the text from a PDF and was written to work for scanned
   books from books.google.com. There are options for stripping of page headers
   and footers in order to make the pure text ready for text mining and NLP. Take
   care of the parentheses, square brackets and pipes in the usage note.
@@ -109,12 +109,13 @@ Available options:
                            signature. (default: "\t\t\t")
   --blockquote BLOCKQUOTE  The prefix for linearizing a block
                            quote. (default: "\t\t$$")
-  -w,--word-pool WORDPOOL  If a path to file with a pool of words (tokens) is
+  -w,--word-pool WORDPOOL  IIf a path to file with a pool of words (tokens) is
                            given, syllable division is repaired in the text
                            output, but only when line categorization is turned
                            on.
-  --syllable-sep ARG       The division mark for syllable division at the line
-                           end. (default: '-')
+  -D,--no-division-mark-required
+                           Use this switch, if syllable division is to be
+                           repaired for lines without dash mark.
   -C,--no-categorization   Do not categorize the lines at all.
   --headlines HEADLINES    Count of lines in the page header to be
                            dropped. (default: 0)
