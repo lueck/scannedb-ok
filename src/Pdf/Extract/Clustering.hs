@@ -6,6 +6,7 @@ import Data.List
 import Data.List.Split
 import Data.Semigroup
 
+-- TODO: write a recursive version, which would be much faster
 
 -- | Simple clustering based on a sliding window.
 -- 
