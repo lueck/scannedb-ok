@@ -36,7 +36,7 @@ import Data.Semigroup
 slidingWindow1D ::
   Int                         -- ^ count of steps
   -> Int                      -- ^ threshold for splitting clusters
-  -> Bool                     -- ^ drop if count of points in a window
+  -> Bool                     -- ^ drop cluster if count of points
                               -- is below threshold
   -> (a -> Double)            -- ^ get the coordinate
   -> Double                   -- ^ starting point
@@ -55,7 +55,7 @@ slidingWindow1D steps threshold drp getter start end points =
   -- concat windows and remove duplicates again
   map (nub . concat) $
   -- split by empty windows
-  splitWhen ((<=threshold) . length) $
+  splitWhenKeepDelim ((<=threshold) . length) $
   -- for each step filter the data points in window
   map (\stp -> (filter ((inWindow stp) . getter') points')) $
   map (\n -> start + fromIntegral(n) * stepWidth) [0..steps]
@@ -66,6 +66,7 @@ slidingWindow1D steps threshold drp getter start end points =
     inWindow offset coord = coord >= offset && coord <= offset + window
     stepWidth = (end - start) / (fromIntegral $ steps - 1)
     window = stepWidth * 2 -- overlapping
+    splitWhenKeepDelim = split . condense . whenElt
 
 
 -- | Return the longest list of a list of lists.

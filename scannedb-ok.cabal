@@ -99,6 +99,7 @@ test-suite scannedb-ok-test
                 Paths_scannedb_ok
               , Test.Pdf.Extract.Syllable
               , Test.Pdf.Extract.PyPdfMiner
+              , Test.Pdf.Extract.Lines
   hs-source-dirs:
                 test
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
