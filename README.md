@@ -185,18 +185,19 @@ base of the following heuristics:
 
 ### Syllable division
 
-- search for an unknown part of bigram around a line break
-- the first part of the bigram must end with a hyphenation mark,
-  e.g. `-`. Most interestingly google books as no hyphenation mark (at
-  least for Gothic script). (TODO: at the moment, no hyphenation mark
-  is tested)
+- test if the parts of bigram around a line break are known in a
+  reference vocabulary
+- the first part of the bigram must (or needn't, that's configurable
+  by command line options) end with a hyphenation mark, e.g. `-`. Most
+  interestingly google books as no hyphenation mark (at least for
+  Gothic script).
 - if one of them is not known in a reference vocabulary, try to join
   them
 - join them, if the joint token is present in the vocabulary
 
-This heuristics may lead to false positives if the reference
-vocabulary is too small. Have Zipf's law in mind: A multitude of
-tokens occur only once in your document!
+The success of these heuristics depends on the reference
+vocabulary. Have Zipf's law in mind: A multitude of tokens occur only
+once in your document!
 
 Use the `--tokens` option to generate a list of tokens from the
 document without the bigrams around line breaks.
@@ -361,3 +362,45 @@ That's the output of `scannedb-ok -x -C -r 205 Heg1835a.xml`:
 	zuführen, ſondern läßt ſchon ein qualitatives Verhalten der Y
 
 
+There is still an other command line option dealing with
+dropping/not-dropping fail-OCRed glyphs. `-k` keeps the glyphs found
+between the lines by the clustering algorithm used for collecting
+glyphs into lines. It also works on glyphs between the lines virtually
+extended into the margins of the page. The output of `scannedb-ok -x
+ -C -r 205 Heg1835a.xml -k` shows a curly brace:
+
+	178 Erſter Theil. Idee des Kunſtſchönen.
+	hören, laſſen wir wie es iſt. Die Organe des Geruchs und Ge
+	ſchmacks dagegen gehören ſchon dem Beginne des praktiſchen Ver
+	hältniſſes an. Denn zu riechen iſt nur dasjenige, was ſchon im
+	Sichverzehren begriffen iſt, und ſchmecken können wir nur, indem
+	wir zerſtören. Nun haben wir zwar nur eine Naſe, aber ſie iſt
+	zweigetheilt und durchaus in ihren Hälften regelmäßig gebildet.
+	Aehnlich iſt es mit den Lippen, Zähnen u. ſ. f. Durchaus regel
+	mäßig aber in ihrer Stellung, Geſtalt u. ſ. f. ſind Augen und
+	Ohren, und die Glieder für die Ortsverändrung und die Be
+	mächtigung und praktiſche Verändrung der äußeren Objekte,
+	Beine und Arme.
+	}
+	Auch im Organiſchen alſo hat die Regelmäßigkeit ihr be
+	griffsgemäßes Recht, aber nur bei den Gliedern, welche die Werk
+	zeuge für den unmittelbaren Bezug auf die Außenwelt abgeben,
+	und nicht den Bezug des Organismus auf ſich ſelbſt als in ſich
+	zurückkehrende Subjektivität des Lebens bethätigen.
+	Dieß wären die Hauptbeſtimmungen der regelmäßigen und
+	ſymmetriſchen Formen und ihrer geſtaltenden Herrſchaft in den
+	Naturerſcheinungen.
+	Näher nun aber von dieſer abſtrakteren Form iſt
+	b) die Geſetzmäßigkeit
+	zu unterſcheiden, inſofern ſie ſchon auf einer höheren Stufe ſteht,
+	und den Uebergang zu der Freiheit des Lebendigen, ſowohl des
+	natürlichen als auch des geiſtigen, ausmacht. Für ſich jedoch be
+	trachtet iſt die Geſetzmäßigkeit zwar noch nicht die ſubjektive to
+	tale Einheit und Freiheit ſelber, doch iſt ſie bereits eine Tota
+	lität weſentlicher Unterſchiede, welche nicht nur als Unter
+	ſchiede und Gegenſätze ſich hervorkehren, ſondern in ihrer To
+	talität Einheit und Zuſammenhang zeigen. Solche geſetz
+	mäßige Einheit und ihre Herrſchaft, obſchon ſie noch im Quan
+	titativen ſich geltend macht, iſt nicht mehr auf an ſich ſelbſt äu
+	ßerliche und nur zählbare Unterſchiede der bloßen Größe zurück
+	zuführen, ſondern läßt ſchon ein qualitatives Verhalten der Y

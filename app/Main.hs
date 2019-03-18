@@ -38,8 +38,8 @@ import Pdf.Extract.Syllable
 data PdfToText = PdfToText
   { inputMethod :: InputMethod
   , outputMethod :: OutputMethod
-  , pages :: String -- Maybe (Range Int)
-  , linesPerPage :: Int
+  , pages :: String
+  , lineOpts :: LineOptions
   , fixedSpacingFactor :: Double
   , lineCategorizer :: LineCategorizer
   , nlpOut :: Bool
@@ -115,12 +115,7 @@ pdfToText_ = PdfToText
                  <> help "Ranges of pages to extract. Defaults to all. Examples: 3-9 or -10 or 2,4,6,20-30,40- or \"*\" for all. Except for all do not put into quotes."
                  <> value "*"
                  <> metavar "PAGES")
-  <*> option auto (short 'l'
-                   <> long "lines-per-page"
-                   <> help "Lines per page. Lines of a vertically filled page. This does not need to be exact."
-                   <> value 42
-                   <> showDefault
-                   <> metavar "LINES")
+  <*> lineOpts_
   <*> option auto (short 'f'
                    <> long "spacing-factor"
                    <> help "A fixed spacing factor. If the distance between two glyphs exceeds the product of the first glyphs width and this factor, a space is inserted. For Gothic letter scanned by google values down to 1 are promising."
@@ -156,7 +151,34 @@ pdfToText_ = PdfToText
   <*> argument str (metavar "INFILE"
                     <> help "Path to the input file.")
 
+lineOpts_ :: Parser LineOptions
+lineOpts_ = LineOptions
+  <$> option auto
+  (short 'l'
+   <> long "lines-per-page"
+   <> help "Lines per page. Lines of a vertically filled page. This does not need to be exact."
+   <> value 42
+   <> showDefault
+   <> metavar "LINES")
+  <*> option auto
+  (long "threshold"
+   <> help "A threshold value important for the identification of lines by the internal clustering algorithm: Fail-OCRed glyphs between the lines may disturb the separation of lines. Instead of 0, the threshold value of is used to separate the clusters. If set to high, short lines may be dropped of."
+   <> value 2
+   <> showDefault
+   <> metavar "THRESHOLD")
+  <*> fmap not (switch
+  (short 'k'
+   <> long "keep-single-glyphs-lines"
+   <> help "Do not drop glyphs found between the lines. By default, lines with a count of glyphs under THRESHOLD are dropped."))
+  <*> option auto
+  (long "steps-per-line"
+   <> help "With the STEPS per line you may tweak the clustering algorithm for the indentification of lines."
+   <> value 5
+   <> showDefault
+   <> metavar "STEPS")
 
+
+-- | Parser for linearization command line options
 linOpts_ :: Parser LinearizationOpts
 linOpts_ = LinOpts
   <$> ((flag Part3 Part3
@@ -226,7 +248,7 @@ linOpts_ = LinOpts
                  <> showDefault
                  <> metavar "BLOCKQUOTE")
 
-
+-- | A parser for command line arguments for line categorization
 byIndentOpts_ :: Parser ByIndentOpts
 byIndentOpts_ = ByIndentOpts
   <$> option auto
@@ -261,6 +283,7 @@ byIndentOpts_ = ByIndentOpts
    <> long "drop-margin"
    <> help "Drop glyphs found outside of the type area. The type area is determined by a clustering algorithm which assumes that the most lines completely fill the type area horizontally. Do not use this switch, if this is not the case for your text. It may produce errors on pages with only one or two lines.")
 
+-- | A parser for command line options for repairing syllable divisions
 syllableRepair_ :: Parser SyllableRepair
 syllableRepair_ = SylRepair
   <$> optional (strOption
@@ -292,23 +315,23 @@ main = execParser opts >>= run
   where opts = info (helper <*> pdfToText_)
           ( fullDesc
             <> progDesc
-            "scannedb-ok extracts the text from a PDF and was written to work for scanned books from books.google.com. There are options for stripping of page headers and footers in order to make the pure text ready for text mining and NLP.\n\nTake care of the parentheses, square brackets and pipes in the usage note. Parentheses group options together, the pipe divides (groups of options) into alternatives. Square brackets mean that the option is optional.\n\nThere are two input formats, pdf and xml. There are six output formats: --text which is the default, --no-spaces for scriptura continua, --statistics for information on each page, --spacing for csv output with information on glyphs an inter-glyph spacing, --glyphs for an internal representation of glyphs, --tokens for output of a list of words which can be reused for repairing syllable divisions. There are two modes of line detection: -i for categorization of lines into headline, footline etc., -C for no such categorization at all. These modes have various options."
+            "scannedb-ok extracts the text from a PDF and was written to work for scanned books from books.google.com. There are options for stripping of page headers and footers in order to make the pure text ready for text mining and NLP.\n\nTake care of the parentheses, square brackets and pipes in the usage note. Parentheses group options together, the pipe divides (groups of options) into alternatives. Square brackets mean that the option is optional.\n\nThere are two input formats, pdf and xml. There are six output formats: --text which is the default, --no-spaces for scriptura continua, --statistics for information on each page, --spacing for csv output with information on glyphs an inter-glyph spacing, --glyphs for an internal representation of glyphs, --tokens for output of a list of words which can be reused for repairing syllable divisions. There are two modes of line detection: -i for categorization of lines into headline, footline etc., -C for no such categorization at all. These modes have various options.\n\nThe order of the command line arguments does not matter."
             <> header "scannedb-ok - extract text from a PDF, even scanned books." )
 
 
 -- | Run the extractor with the parsed command line arguments.
 run :: PdfToText -> IO ()
-run (PdfToText PdfMinerXml outputMethod pages lines' spacing' lineCategorizer' nlp' inputFile) = do
+run (PdfToText PdfMinerXml outputMethod pages lineOpts spacing' lineCategorizer' nlp' inputFile) = do
   case (R.parseRanges pages)::(Either R.ParseError [R.Range Int]) of
     Left err -> do
       print err
       return ()
     Right ranges -> do
       glyphs <- B.readFile inputFile >>= parseXml ranges
-      mapM (uncurry (extract outputMethod lines' spacing' (nlpOutput nlp' lineCategorizer'))) $
+      mapM (uncurry (extract outputMethod lineOpts spacing' (nlpOutput nlp' lineCategorizer'))) $
         zip [1..] glyphs
       return ()
-run (PdfToText _ outputMethod pages lines' spacing' lineCategorizer' nlp' inputFile) = do
+run (PdfToText _ outputMethod pages lineOpts spacing' lineCategorizer' nlp' inputFile) = do
   case (R.parseRanges pages)::(Either R.ParseError [R.Range Int]) of
     Left err -> do
       print err
@@ -321,21 +344,21 @@ run (PdfToText _ outputMethod pages lines' spacing' lineCategorizer' nlp' inputF
         rootNode <- P.catalogPageNode catalog
         count <- P.pageNodeNKids rootNode
         let pages = map (\n -> n - 1) $ filter (R.inRanges ranges) [1 .. count]
-        mapM (extractPdfPage outputMethod lines' spacing' (nlpOutput nlp' lineCategorizer') rootNode) pages
+        mapM (extractPdfPage outputMethod lineOpts spacing' (nlpOutput nlp' lineCategorizer') rootNode) pages
         return ()
 
 -- | extract a single page using the pdf-toolbox
-extractPdfPage :: OutputMethod -> Int -> Double -> LineCategorizer -> P.PageNode -> Int -> IO ()
-extractPdfPage outputMethod lines' spacing' lineCategorizer' rootNode n = do
+extractPdfPage :: OutputMethod -> LineOptions -> Double -> LineCategorizer -> P.PageNode -> Int -> IO ()
+extractPdfPage outputMethod lineOpts spacing' lineCategorizer' rootNode n = do
   page <- P.pageNodePageByNum rootNode n
   spans <- P.pageExtractGlyphs page
-  extract outputMethod lines' spacing' lineCategorizer' n $ concatMap P.spGlyphs spans
+  extract outputMethod lineOpts spacing' lineCategorizer' n $ concatMap P.spGlyphs spans
   return ()
 
 
 extract :: (Show g, Eq g, Glyph g) =>
   OutputMethod ->               -- ^ output method
-  Int ->                        -- ^ count of lines
+  LineOptions ->                -- ^ count of lines etc.
   Double ->                     -- ^ spacing factor
   LineCategorizer ->            -- ^ config of line categorizer
   Int ->                        -- ^ page number
@@ -344,22 +367,22 @@ extract :: (Show g, Eq g, Glyph g) =>
 extract Glyphs _ _ _ _ glyphs = do
   mapM (putStrLn . show) glyphs
   return ()
-extract Info lines' _ _ page' glyphs = do
+extract Info lineOpts _ _ page' glyphs = do
   putStr "#Glyphs: "
   print $ length glyphs
   putStr "Top: "
   print $ glyphsTop glyphs
   putStr "Bottom: "
   print $ glyphsBottom glyphs
-  let lines = findLinesWindow lines' 5 2 True glyphs
+  let lines = findLinesWindow lineOpts glyphs
   printLineInfo $ genLineInfo lines
   return ()
-extract NoSpaces lines' _ _ _ glyphs = do
-  let lines = findLinesWindow lines' 5 2 True glyphs
+extract NoSpaces lineOpts _ _ _ glyphs = do
+  let lines = findLinesWindow lineOpts glyphs
   mapM (T.putStrLn . (linearizeLine (T.concat . mapMaybe text))) lines
   return ()
-extract Spacing' lines' _ _ page' glyphs = do
-  let lines = findLinesWindow lines' 5 2 True glyphs
+extract Spacing' lineOpts _ _ page' glyphs = do
+  let lines = findLinesWindow lineOpts glyphs
       lines_ = zip3 (map Just [1..]) (repeat (Just page')) $ map (sortOn xLeft) lines
       csvOpts = Csv.defaultEncodeOptions {
         Csv.encDelimiter = fromIntegral $ ord ','
@@ -369,25 +392,25 @@ extract Spacing' lines' _ _ page' glyphs = do
   where
     getGlyph :: Glyph g => (a, b, [g]) -> [g]
     getGlyph (_, _, g) = g
-extract Tokens lines' spacing' (ByIndent byIndOpts linOpts sylOpts) _ glyphs = do
+extract Tokens lineOpts spacing' (ByIndent byIndOpts linOpts sylOpts) _ glyphs = do
   let tokens = concatMap (tokenizeMiddle) $
                map (linearizeCategorizedLine linOpts (spacingFactor spacing')) $
                categorizeLines (byIndent byIndOpts) $
-               findLinesWindow lines' 5 2 True glyphs
+               findLinesWindow lineOpts glyphs
   mapM T.putStrLn tokens
   return ()
-extract Tokens lines' spacing' (AsDefault headlines' footlines') _ glyphs = do
+extract Tokens lineOpts spacing' (AsDefault headlines' footlines') _ glyphs = do
   let tokens = concatMap (tokenizeMiddle) $
                map (linearizeLine (spacingFactor spacing')) $
                drop headlines' $
                dropFoot footlines' $
-               findLinesWindow lines' 5 2 True glyphs
+               findLinesWindow lineOpts glyphs
   mapM T.putStrLn tokens
   return ()
-extract _ lines' spacing' (ByIndent byIndOpts linOpts sylOpts) _ glyphs = do
+extract _ lineOpts spacing' (ByIndent byIndOpts linOpts sylOpts) _ glyphs = do
   let lines = map (linearizeCategorizedLine linOpts (spacingFactor spacing')) $
               categorizeLines (byIndent byIndOpts) $
-              findLinesWindow lines' 5 2 True glyphs
+              findLinesWindow lineOpts glyphs
   linearized <- if (isJust $ tokensFile sylOpts)
                 then loadTokens (fromMaybe "/dev/null" $ tokensFile sylOpts) >>=
                      \ws -> repair (flip M.member ws) (markRequired sylOpts) [] lines
@@ -396,8 +419,8 @@ extract _ lines' spacing' (ByIndent byIndOpts linOpts sylOpts) _ glyphs = do
   mapM T.putStr linearized
   T.putStr(T.singleton $ chr 12) -- add form feed at end of page
   return ()
-extract _ lines' spacing' (AsDefault headlines' footlines') _ glyphs = do
-  let lines = findLinesWindow lines' 5 2 True glyphs
+extract _ lineOpts spacing' (AsDefault headlines' footlines') _ glyphs = do
+  let lines = findLinesWindow lineOpts glyphs
   mapM (T.putStrLn . (linearizeLine (spacingFactor spacing'))) $
     (drop headlines') $ dropFoot footlines' lines
   T.putStr(T.singleton $ chr 12) -- add form feed at end of page
