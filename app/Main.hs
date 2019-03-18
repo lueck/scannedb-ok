@@ -69,7 +69,8 @@ data LineCategorizer
 -- syllable division
 data SyllableRepair = SylRepair
   { tokensFile :: Maybe FilePath
-  , divisionMark :: Char
+  --, divisionMark :: Char
+  , markRequired :: Bool
   }
 
 
@@ -267,12 +268,16 @@ syllableRepair_ = SylRepair
    <> long "word-pool"
    <> help "If a path to file with a pool of words (tokens) is given, syllable division is repaired in the text output, but only when line categorization is turned on."
    <> metavar "WORDPOOL"))
-  <*> option auto
-  (long "syllable-sep"
-   <> help "The division mark for syllable division at the line end."
-   <> value '-'
-   <> showDefault
-   <> hidden)
+  <*> switch
+  (short 'D'
+   <> long "no-division-mark-required"
+   <> help "Use this switch, if syllable division is to be repaired for lines without dash mark.")
+  -- <*> option auto
+  -- (long "syllable-sep"
+  --  <> help "The division mark for syllable division at the line end."
+  --  <> value '-'
+  --  <> showDefault
+  --  <> hidden)
 
 
 nlpOutput :: Bool -> LineCategorizer -> LineCategorizer
@@ -385,7 +390,7 @@ extract _ lines' spacing' (ByIndent byIndOpts linOpts sylOpts) _ glyphs = do
               findLinesWindow lines' 5 2 True glyphs
   linearized <- if (isJust $ tokensFile sylOpts)
                 then loadTokens (fromMaybe "/dev/null" $ tokensFile sylOpts) >>=
-                     \ws -> repair (flip M.member ws) True [] lines
+                     \ws -> repair (flip M.member ws) (markRequired sylOpts) [] lines
                      -- /dev/null is never loaded, because of if condition
                 else return lines
   mapM T.putStr linearized

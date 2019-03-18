@@ -26,12 +26,12 @@ repair kown True acc (l:nl:ls)
       repair kown True (l:acc) (nl:ls)
   -- mark present and joint token without dash known
   | (endsWithDash $ lastWord l) &&
-    (kown ((stripEndDash $ lastWord l) <> firstWord nl)) = do
+    (kown ((stripEndDash $ lastWord l) <> (stripEndPunctuation $ firstWord nl))) = do
       logging $ "Joining \"" <> lastWord l <> "\" and \"" <> firstWord nl <> "\". A"
       repair kown True ((appendToLine stripEndDash l (firstWord nl)):acc) ((restOf nl):ls)
   -- mark present and joint token with dash known
   | (endsWithDash $ lastWord l) &&
-    (kown (lastWord l <> firstWord nl)) = do
+    (kown (lastWord l <> (stripEndPunctuation $ firstWord nl))) = do
       logging $ "Joining \"" <> lastWord l <> "\" and \"" <> firstWord nl <> "\". B"
       repair kown True ((appendToLine id l (firstWord nl)):acc) ((restOf nl):ls)
   -- mark present and joint token unknown
@@ -44,18 +44,21 @@ repair kown False acc (l:nl:ls)
   | endsWithPunctuation $ lastWord l = do
       repair kown False (l:acc) (nl:ls)
   -- both tokens known: do not repair. FIXME: stripEndDash on (lastWord l)?
-  | (kown $ lastWord l) && (kown $ firstWord nl) =
+  | (kown $ lastWord l) &&
+    (kown $ stripEndPunctuation $ firstWord nl) =
       repair kown False (l:acc) (nl:ls)
   -- ends with dash or one tokens unkown and joint token without dash known
   | ((endsWithDash $ lastWord l) ||
-     (not $ kown $ stripEndDash $ lastWord l) || (not $ kown $ firstWord nl)) &&
-    (kown ((stripEndDash $ lastWord l) <> firstWord nl)) = do
+     (not $ kown $ stripEndDash $ lastWord l) ||
+     (not $ kown $ stripEndPunctuation $ firstWord nl)) &&
+    (kown ((stripEndDash $ lastWord l) <> (stripEndPunctuation $ firstWord nl))) = do
       logging $ "Joining \"" <> lastWord l <> "\" and \"" <> firstWord nl <> "\"."
       repair kown False ((appendToLine stripEndDash l (firstWord nl)):acc) ((restOf nl):ls)
   -- ends with dash or one tokens unkown and joint token with dash known
   | ((endsWithDash $ lastWord l) ||
-     (not $ kown $ stripEndDash $ lastWord l) || (not $ kown $ firstWord nl)) &&
-    (kown ((lastWord l) <> firstWord nl)) = do
+     (not $ kown $ stripEndDash $ lastWord l) ||
+     (not $ kown $ stripEndPunctuation $ firstWord nl)) &&
+    (kown ((lastWord l) <> (stripEndPunctuation $ firstWord nl))) = do
       logging $ "Joining \"" <> lastWord l <> "\" and \"" <> firstWord nl <> "\"."
       repair kown False ((appendToLine id l (firstWord nl)):acc) ((restOf nl):ls)
   -- joint token unkown
@@ -86,6 +89,9 @@ stripEndDash = T.dropWhileEnd isDivisionMark
 
 isDivisionMark :: Char -> Bool
 isDivisionMark c = generalCategory c == DashPunctuation || c == '='
+
+stripEndPunctuation :: T.Text -> T.Text
+stripEndPunctuation = T.dropWhileEnd isPunctuation
 
 firstWord :: T.Text -> T.Text
 --firstWord = fst . T.breakOn " " . T.stripStart
