@@ -36,26 +36,19 @@ resolver: lts-12.26
 #  - wai
 packages:
 - .
-- ../pdf-toolbox/core
-- ../pdf-toolbox/content
-- ../pdf-toolbox/document
-# - location:
-#    git: https://github.com/Yuras/pdf-toolbox.git
-#    commit: 900e607c9407f0e0a8c5590953fc2667b2926bfd
 
 # Dependency packages to be pulled from upstream that are not in the resolver
 # using the same syntax as the packages field.
 # (e.g., acme-missiles-0.3)
 # extra-deps: []
 extra-deps:
-# - pdf-toolbox-content-0.0.5.1
-# - pdf-toolbox-core-0.0.4.1
-# - pdf-toolbox-document-0.0.7.1
-# - pdf-toolbox-content
-# - pdf-toolbox-core
-# - pdf-toolbox-document
+- github: Yuras/pdf-toolbox
+  commit: 900e607c9407f0e0a8c5590953fc2667b2926bfd
+  subdirs:
+      - core
+      - content
+      - document
 - range-0.2.1.1
-
 
 # Override default flag values for local packages and extra-deps
 # flags: {}
