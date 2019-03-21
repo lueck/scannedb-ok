@@ -31,7 +31,7 @@ extract two or more columns, though.
   header and footer, sheet signature etc.
 - gives options for formatting (indenting) these line types
 - repairs syllable division at line breaks
-- besides plain text output, can generates
+- besides plain text output, can generate
 	- a word pool for repairing syllable divisions
 	- scriptura continua
 	- statistics about each page
@@ -61,10 +61,8 @@ piping PDFMiner's `-t xml`-output into `scannedb-ok` is the way to go.**
 For building and installing [`stack`](https://docs.haskellstack.org),
 the haskell build tool, is required.
 
-1. Clone this repository
-2. Clone [`pdf-toolbox`](https://github.com/Yuras/pdf-toolbox) so
-   that it lives in the same directory as `scannedb-ok`.
-3. `cd` into the `scannedb-ok` directory and run
+Clone this repository and `cd` into the `scannedb-ok` directory and
+run
 
 		stack setup
 		stack build
