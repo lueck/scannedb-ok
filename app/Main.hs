@@ -328,7 +328,7 @@ run (PdfToText PdfMinerXml outputMethod pages lineOpts spacing' lineCategorizer'
       return ()
     Right ranges -> do
       glyphs <- B.readFile inputFile >>= parseXml ranges
-      mapM (uncurry (extract outputMethod lineOpts spacing' (nlpOutput nlp' lineCategorizer'))) $
+      extract outputMethod lineOpts spacing' (nlpOutput nlp' lineCategorizer') $
         zip [1..] glyphs
       return ()
 run (PdfToText _ outputMethod pages lineOpts spacing' lineCategorizer' nlp' inputFile) = do
@@ -344,16 +344,16 @@ run (PdfToText _ outputMethod pages lineOpts spacing' lineCategorizer' nlp' inpu
         rootNode <- P.catalogPageNode catalog
         count <- P.pageNodeNKids rootNode
         let pages = map (\n -> n - 1) $ filter (R.inRanges ranges) [1 .. count]
-        mapM (extractPdfPage outputMethod lineOpts spacing' (nlpOutput nlp' lineCategorizer') rootNode) pages
+        glyphs :: [[P.Glyph]] <- mapM (extractPdfPageGlyphs rootNode) pages
+        extract outputMethod lineOpts spacing' (nlpOutput nlp' lineCategorizer') $ zip pages glyphs
         return ()
 
--- | extract a single page using the pdf-toolbox
-extractPdfPage :: OutputMethod -> LineOptions -> Double -> LineCategorizer -> P.PageNode -> Int -> IO ()
-extractPdfPage outputMethod lineOpts spacing' lineCategorizer' rootNode n = do
+-- | get all the glyphs from a page using the pdf-toolbox
+extractPdfPageGlyphs :: P.PageNode -> Int -> IO ([P.Glyph])
+extractPdfPageGlyphs  rootNode n = do
   page <- P.pageNodePageByNum rootNode n
   spans <- P.pageExtractGlyphs page
-  extract outputMethod lineOpts spacing' lineCategorizer' n $ concatMap P.spGlyphs spans
-  return ()
+  return $ concatMap P.spGlyphs spans
 
 
 extract :: (Show g, Eq g, Glyph g) =>
@@ -361,70 +361,77 @@ extract :: (Show g, Eq g, Glyph g) =>
   LineOptions ->                -- ^ count of lines etc.
   Double ->                     -- ^ spacing factor
   LineCategorizer ->            -- ^ config of line categorizer
-  Int ->                        -- ^ page number
-  [g] ->                        -- ^ glyphs on this page
+  [(Int, [g])] ->               -- ^ list of tuples of page number and
+                                -- glyphs on this page
   IO ()
-extract Glyphs _ _ _ _ glyphs = do
-  mapM (putStrLn . show) glyphs
-  return ()
-extract Info lineOpts _ _ page' glyphs = do
-  putStr "#Glyphs: "
-  print $ length glyphs
-  putStr "Top: "
-  print $ glyphsTop glyphs
-  putStr "Bottom: "
-  print $ glyphsBottom glyphs
-  let lines = findLinesWindow lineOpts glyphs
-  printLineInfo $ genLineInfo lines
-  return ()
-extract NoSpaces lineOpts _ _ _ glyphs = do
-  let lines = findLinesWindow lineOpts glyphs
-  mapM (T.putStrLn . (linearizeLine (T.concat . mapMaybe text))) lines
-  return ()
-extract Spacing' lineOpts _ _ page' glyphs = do
-  let lines = findLinesWindow lineOpts glyphs
-      lines_ = zip3 (map Just [1..]) (repeat (Just page')) $ map (sortOn xLeft) lines
-      csvOpts = Csv.defaultEncodeOptions {
-        Csv.encDelimiter = fromIntegral $ ord ','
-        }
-  mapM (C.putStr . (Csv.encodeWith csvOpts) . (uncurry3 spacingsInLine)) lines_
-  return ()
+extract Glyphs _ _ _ glyphs = do
+  mapM_ (putStrLn . show) $ concatMap snd glyphs
+extract Info lineOpts _ _ glyphs' = do
+  forM_ glyphs' (\(page, glyphs) -> do
+                    putStr "Page: "
+                    print $ show page
+                    putStr "#Glyphs: "
+                    print $ length glyphs
+                    putStr "Top: "
+                    print $ glyphsTop glyphs
+                    putStr "Bottom: "
+                    print $ glyphsBottom glyphs
+                    let lines = findLinesWindow lineOpts glyphs
+                    printLineInfo $ genLineInfo lines)
+extract NoSpaces lineOpts _ _ glyphs' = do
+  forM_ glyphs' (\(page, glyphs) -> do
+                    let lines = findLinesWindow lineOpts glyphs
+                    mapM_ (T.putStrLn . (linearizeLine (T.concat . mapMaybe text))) lines)
+extract Spacing' lineOpts _ _ glyphs' = do
+  forM_ glyphs' (\(page, glyphs) -> do
+                    let lines = findLinesWindow lineOpts glyphs
+                        lines_ = zip3 (map Just [1..])
+                                 (repeat (Just page))
+                                 $ map (sortOn xLeft) lines
+                        csvOpts = Csv.defaultEncodeOptions {
+                          Csv.encDelimiter = fromIntegral $ ord ','
+                          }
+                    mapM (C.putStr .
+                          (Csv.encodeWith csvOpts) .
+                          (uncurry3 spacingsInLine)) lines_)
   where
     getGlyph :: Glyph g => (a, b, [g]) -> [g]
     getGlyph (_, _, g) = g
-extract Tokens lineOpts spacing' (ByIndent byIndOpts linOpts sylOpts) _ glyphs = do
-  let tokens = concatMap (tokenizeMiddle) $
-               map (linearizeCategorizedLine linOpts (spacingFactor spacing')) $
-               categorizeLines (byIndent byIndOpts) $
-               findLinesWindow lineOpts glyphs
-  mapM T.putStrLn tokens
-  return ()
-extract Tokens lineOpts spacing' (AsDefault headlines' footlines') _ glyphs = do
-  let tokens = concatMap (tokenizeMiddle) $
-               map (linearizeLine (spacingFactor spacing')) $
-               drop headlines' $
-               dropFoot footlines' $
-               findLinesWindow lineOpts glyphs
-  mapM T.putStrLn tokens
-  return ()
-extract _ lineOpts spacing' (ByIndent byIndOpts linOpts sylOpts) _ glyphs = do
-  let lines = map (linearizeCategorizedLine linOpts (spacingFactor spacing')) $
-              categorizeLines (byIndent byIndOpts) $
-              findLinesWindow lineOpts glyphs
-  linearized <- if (isJust $ tokensFile sylOpts)
-                then loadTokens (fromMaybe "/dev/null" $ tokensFile sylOpts) >>=
-                     \ws -> repair (flip M.member ws) (markRequired sylOpts) [] lines
-                     -- /dev/null is never loaded, because of if condition
-                else return lines
-  mapM T.putStr linearized
-  T.putStr(T.singleton $ chr 12) -- add form feed at end of page
-  return ()
-extract _ lineOpts spacing' (AsDefault headlines' footlines') _ glyphs = do
-  let lines = findLinesWindow lineOpts glyphs
-  mapM (T.putStrLn . (linearizeLine (spacingFactor spacing'))) $
-    (drop headlines') $ dropFoot footlines' lines
-  T.putStr(T.singleton $ chr 12) -- add form feed at end of page
-  return ()
+extract Tokens lineOpts spacing' (ByIndent byIndOpts linOpts sylOpts) glyphs' = do
+  forM_ glyphs' (\(page, glyphs) -> do
+                    let tokens = concatMap (tokenizeMiddle) $
+                                 map (linearizeCategorizedLine linOpts (spacingFactor spacing')) $
+                                 categorizeLines (byIndent byIndOpts) $
+                                 findLinesWindow lineOpts glyphs
+                    mapM T.putStrLn tokens)
+extract Tokens lineOpts spacing' (AsDefault headlines' footlines') glyphs' = do
+  forM_ glyphs' (\(page, glyphs) -> do
+                    let tokens = concatMap (tokenizeMiddle) $
+                                 map (linearizeLine (spacingFactor spacing')) $
+                                 drop headlines' $
+                                 dropFoot footlines' $
+                                 findLinesWindow lineOpts glyphs
+                    mapM T.putStrLn tokens)
+extract _ lineOpts spacing' (ByIndent byIndOpts linOpts sylOpts) glyphs' = do
+  forM_ glyphs' (\(page, glyphs) -> do
+                    let lines = map (linearizeCategorizedLine linOpts (spacingFactor spacing')) $
+                                categorizeLines (byIndent byIndOpts) $
+                                findLinesWindow lineOpts glyphs
+                    linearized <- if (isJust $ tokensFile sylOpts)
+                      then loadTokens (fromMaybe "/dev/null" $ tokensFile sylOpts) >>=
+                           \ws -> repair (flip M.member ws) (markRequired sylOpts) [] lines
+                           -- /dev/null is never loaded, because of if condition
+                      else return lines
+                    mapM T.putStr linearized
+                    -- add form feed at end of page
+                    T.putStr(T.singleton $ chr 12))
+extract _ lineOpts spacing' (AsDefault headlines' footlines') glyphs' = do
+  forM_ glyphs' (\(page, glyphs) -> do
+                    let lines = findLinesWindow lineOpts glyphs
+                    mapM (T.putStrLn . (linearizeLine (spacingFactor spacing'))) $
+                      (drop headlines') $ dropFoot footlines' lines
+                    T.putStr(T.singleton $ chr 12) -- add form feed at end of page
+                    return ())
 
 
 dropHead :: Glyph g => Int -> [[g]] -> [[g]]
