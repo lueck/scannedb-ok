@@ -18,10 +18,12 @@ p205 = B.readFile "test/Heg1835a_p205-p205.xml" >>= parseXml [R.InfiniteRange]
 
 p205to207 = B.readFile "test/Heg1835a_p205-p207.xml" >>= parseXml [R.InfiniteRange]
 
+opts = LineOptions 42 2 True 5
+
 
 test_findLines_drop = do
   input <- p205
-  let lines = findLinesWindow 42 5 2 True $ head input
+  let lines = findLinesWindow opts $ head input
   assertEqual 34 $ length lines
   assertEqual
     [35,48,54,52,56,50,56,51,50,47,51,13,46,54,52,51,47,47,54,19,40,20,58,51,55,57,54,52,53,48,51,55,54,53]
@@ -29,7 +31,7 @@ test_findLines_drop = do
 
 test_findLines_noDrop = do
   input <- p205
-  let lines = findLinesWindow 42 5 2 False $ head input
+  let lines = findLinesWindow (opts { dropUnderThreshold = False}) $ head input
   assertEqual 1635 $ length $ concat lines
   assertEqual 35 $ length lines
   assertEqual
@@ -40,7 +42,7 @@ test_findLines_noDrop = do
 
 test_findLines_threshold0 = do
   input <- p205
-  let lines = findLinesWindow 42 5 0 True $ head input
+  let lines = findLinesWindow (opts { threshold = 0}) $ head input
   assertEqual 35 $ length lines
   assertEqual 1635 $ length $ concat lines
   assertEqual
