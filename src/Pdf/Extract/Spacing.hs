@@ -10,6 +10,7 @@ import Data.Maybe
 import GHC.Generics
 import Control.Lens
 import qualified Data.Csv as Csv
+import Data.Char
 
 import Pdf.Extract.Glyph
 
@@ -56,3 +57,59 @@ spacingsInLine l p (g1:g2:gs) =
     <*> Just l
     <*> Just p)
   ++ spacingsInLine l p (g2:gs)
+
+
+-- * ANN
+
+-- | For the inter-word-spacing ANN we represent the characters of a
+-- line without the spaces. Therefore we wrap each character in a
+-- 'Spacing' record. Maybe we shoult make this record a functor. This
+-- wrapping is done by the 'representSpacesAfter' function. The
+-- resulting list can easily be parallelized with the list of glyphs
+-- for the line.
+
+-- | A wrapper for representing spaces.
+data LeftSpacing a
+  = SpaceBefore a
+  | SpaceAfter a
+  | NoSpace a
+  deriving (Show, Eq)
+
+withoutSpace :: LeftSpacing a -> a
+withoutSpace (SpaceBefore a) = a
+withoutSpace (SpaceAfter a) = a
+withoutSpace (NoSpace a) = a
+
+-- | Represent training data.
+representSpacesAfter :: [Char] -> [LeftSpacing Char]
+representSpacesAfter [] = []
+representSpacesAfter (x:[])
+  | x == ' ' = []
+  | otherwise = (NoSpace x):[] 
+representSpacesAfter (x:x2:xs)
+  | x == ' ' = representSpacesAfter (x2:xs) -- drop leading space
+  | x2 == ' ' = (SpaceAfter x) : (representSpacesAfter xs)
+  | otherwise = (NoSpace x) : (representSpacesAfter (x2:xs))
+
+
+-- | Linearize to 'String'.
+leftSpacingToString :: [LeftSpacing Char] -> [Char]
+leftSpacingToString [] = []
+leftSpacingToString ((NoSpace a):xs) = a : (leftSpacingToString xs)
+leftSpacingToString ((SpaceAfter a):xs) = a : ' ' : (leftSpacingToString xs)
+leftSpacingToString ((SpaceBefore a):xs) = ' ' : a : (leftSpacingToString xs)
+
+
+spacingVector :: Glyph g => g -> [Double]
+spacingVector g =
+  [ xLeft g
+  , xRight g
+  , width g
+  , size g
+  , charFeature ord g -- ordinal
+  , charFeature (fromEnum . isUpper) g
+  , charFeature (fromEnum . isLower) g
+  , charFeature (fromEnum . (`elem` (",;:.!?"::[Char]))) g
+  ]
+  where
+    charFeature f = fromIntegral . (fromMaybe 0 . (fmap (f . T.head))) . text

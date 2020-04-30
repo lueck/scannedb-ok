@@ -1,0 +1,68 @@
+name:                scannedb-ok
+synopsis:            "Text extraction from PDF, specially from scanned books"
+version:             0.0.1.0
+github:              "lueck/scannedb-ok"
+license:             BSD-3-Clause OR Apache-2.0
+author:              "Christian Lück"
+maintainer:          "christian.lueck@ruhr-uni-bochum.de"
+copyright:           "2019 Christian Lück"
+
+
+extra-source-files:
+- README.md
+- ChangeLog.md
+
+# Metadata used when publishing your package
+# synopsis:            Short description of your package
+# category:            Web
+
+# To avoid duplicated efforts in documentation and dealing with the
+# complications of embedding Haddock markup inside cabal files, it is
+# common to point users to the README.md file.
+description:         Please see the README on GitHub at <https://github.com/lueck/scannedb-ok#readme>
+
+dependencies:
+- base >= 4.7 && < 5
+- pdf-toolbox-core
+- pdf-toolbox-content
+- pdf-toolbox-document == 0.1.*
+- split
+- text
+- xeno
+- bytestring
+- lens
+- mtl
+- range
+- cassava
+- unordered-containers
+
+
+library:
+  source-dirs: src
+
+executables:
+  scannedb-ok:
+    main:                Main.hs
+    source-dirs:         app
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - scannedb-ok
+    - optparse-applicative
+    - extra
+    - ansi-wl-pprint
+
+tests:
+  scannedb-ok-test:
+    main:                Spec.hs
+    source-dirs:         test
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - scannedb-ok
+    - HTF
+    - extra
