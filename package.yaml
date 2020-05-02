@@ -35,6 +35,8 @@ dependencies:
 - range
 - cassava
 - unordered-containers
+- vector
+- grenade
 
 
 library:

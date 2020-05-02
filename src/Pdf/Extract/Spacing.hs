@@ -1,4 +1,7 @@
-{-# LANGUAGE OverloadedStrings, TemplateHaskell, DeriveGeneric #-}
+{-# LANGUAGE OverloadedStrings
+, TemplateHaskell
+, DeriveGeneric
+, DataKinds #-}
 module Pdf.Extract.Spacing
 where
 
@@ -7,10 +10,14 @@ where
 import qualified Data.Text as T
 import Data.List
 import Data.Maybe
-import GHC.Generics
+import GHC.Generics hiding (S)
 import Control.Lens
 import qualified Data.Csv as Csv
 import Data.Char
+import qualified Data.Vector.Storable as V
+import Data.Semigroup
+import Grenade
+import Grenade.Utils.OneHot
 
 import Pdf.Extract.Glyph
 
@@ -92,7 +99,7 @@ representSpacesAfter (x:x2:xs)
   | otherwise = (NoSpace x) : (representSpacesAfter (x2:xs))
 
 
--- | Linearize to 'String'.
+-- | Linearize to 'LeftSpacing' to 'String'.
 leftSpacingToString :: [LeftSpacing Char] -> [Char]
 leftSpacingToString [] = []
 leftSpacingToString ((NoSpace a):xs) = a : (leftSpacingToString xs)
@@ -100,8 +107,10 @@ leftSpacingToString ((SpaceAfter a):xs) = a : ' ' : (leftSpacingToString xs)
 leftSpacingToString ((SpaceBefore a):xs) = ' ' : a : (leftSpacingToString xs)
 
 
-spacingVector :: Glyph g => g -> [Double]
-spacingVector g =
+-- | Generate a data vector from a 'Glyph'.
+glyphSpacingVector :: Glyph g => g -> V.Vector Double
+glyphSpacingVector g =
+  V.fromList $
   [ xLeft g
   , xRight g
   , width g
@@ -113,3 +122,15 @@ spacingVector g =
   ]
   where
     charFeature f = fromIntegral . (fromMaybe 0 . (fmap (f . T.head))) . text
+
+-- | Generate a shape of data for training or testing an ANN from a
+-- pair of 'Glyph' and 'LeftSpacing' character.
+trainingShape :: Glyph g => (LeftSpacing Char, g) -> Maybe (S ('D1 8), S ('D1 2))
+trainingShape (SpaceAfter _, g) = (,) <$> (fromStorable $ glyphSpacingVector g) <*> oneHot 1
+trainingShape (SpaceBefore _, g) = (,) <$> (fromStorable $ glyphSpacingVector g) <*> oneHot 1
+trainingShape (NoSpace _, g) = (,) <$> (fromStorable $ glyphSpacingVector g) <*> oneHot 0
+
+-- | Generate shapes of data from zipped lists of 'LeftSpacing'
+-- characters and 'Glyph's.
+trainingShapes :: Glyph g => [(LeftSpacing Char, g)] -> [(S ('D1 8), S ('D1 2))]
+trainingShapes = catMaybes . map trainingShape
