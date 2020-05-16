@@ -406,18 +406,33 @@ run (TrainSpacing PdfMinerXml pages lineOpts inputFile trainingData) = do
   ranges <- parseRanges pages
   spaced <- readFile trainingData
   glyphs <- B.readFile inputFile >>= parseXml ranges
+  putStrLn "Verifying training data..."
   let glyphLines = map (findLinesWindow lineOpts) glyphs
-      textGlyphs = map (map (T.unpack .
-                             (linearizeLine (T.concat . mapMaybe text)))) glyphLines
       linesSpaced = map (representSpacesAfter . (filter (/=chr 12))) $
                     filter (/="") $ -- remove empty lines
                     filter (/=[chr 12]) $ -- and lines containing form feed only, e.g. last line
                     lines spaced
-  case (concat textGlyphs == (map (map withoutSpace) linesSpaced)) of
-    False -> do
-      fail "Training data does not match read data."
-    True -> return ()
-  print "Training..."
+      linesByLines = zip linesSpaced (concat glyphLines)
+  trainingData <- mapM (\(spacedLine, glyphLine) -> do
+                           let glyphs = sortOn xLeft glyphLine
+                               txt = T.unpack $ T.concat $ mapMaybe text glyphs
+                           case (map withoutSpace spacedLine) == txt of
+                             True -> return ()
+                             otherwise -> do
+                               putStrLn "Error: Line of training data does not match PDF line"
+                               putStrLn "Training data:"
+                               putStrLn $ leftSpacingToString spacedLine
+                               putStrLn "PDF data:"
+                               putStrLn txt
+                               fail "Invalid training data"
+                           let td = mkTrainingShapes33 spacedLine glyphs
+                           case (length td == length spacedLine) of
+                             False -> do
+                               fail "Error while generating training data"
+                             True -> return ()
+                           return td) linesByLines
+  putStrLn "Training..."
+  -- putStrLn $ show trainingData
 
 
 parseRanges :: String -> IO [R.Range Int]

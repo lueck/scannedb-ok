@@ -18,6 +18,7 @@ import qualified Data.Vector.Storable as V
 import Data.Semigroup
 import Grenade
 import Grenade.Utils.OneHot
+import GHC.TypeNats
 
 import Pdf.Extract.Glyph
 
@@ -108,8 +109,8 @@ leftSpacingToString ((SpaceBefore a):xs) = ' ' : a : (leftSpacingToString xs)
 
 
 -- | Generate a data vector from a 'Glyph'.
-glyphSpacingVector :: Glyph g => g -> V.Vector Double
-glyphSpacingVector g =
+singleGlyphSpacingVector :: Glyph g => g -> V.Vector Double
+singleGlyphSpacingVector g =
   V.fromList $
   [ xLeft g
   , xRight g
@@ -123,14 +124,74 @@ glyphSpacingVector g =
   where
     charFeature f = fromIntegral . (fromMaybe 0 . (fmap (f . T.head))) . text
 
--- | Generate a shape of data for training or testing an ANN from a
--- pair of 'Glyph' and 'LeftSpacing' character.
-trainingShape :: Glyph g => (LeftSpacing Char, g) -> Maybe (S ('D1 8), S ('D1 2))
-trainingShape (SpaceAfter _, g) = (,) <$> (fromStorable $ glyphSpacingVector g) <*> oneHot 1
-trainingShape (SpaceBefore _, g) = (,) <$> (fromStorable $ glyphSpacingVector g) <*> oneHot 1
-trainingShape (NoSpace _, g) = (,) <$> (fromStorable $ glyphSpacingVector g) <*> oneHot 0
+-- | Generate data vectors from a line of 'Glyph's by moving a window
+-- over the line. The number of preceding and succeding glyphs,
+-- i.e. the size of the window, is set by the first two arguments.
+mkSpacingVectors
+  :: Glyph g =>
+     Int                             -- ^ number of preceding glyphs in window
+  -> Int                             -- ^ number of succeding glyphs in window
+  -> [g]                             -- ^ the line's glyphs
+  -> [V.Vector Double]               -- ^ a vector of float values for each glyph
+mkSpacingVectors pre succ gs =
+  take (length gs) $ drop pre $
+  fst $
+  foldl' moveWindow ([], (take pre $ repeat Nothing)) $
+  ((take pre $ repeat Nothing) ++ (map Just gs) ++ (take succ $ repeat Nothing))
+  where
+    moveWindow :: Glyph g =>
+                  ([V.Vector Double], [Maybe g])
+               -> Maybe g
+               -> ([V.Vector Double], [Maybe g])
+    moveWindow (vecs, oldWindow) curr = ((mkSpacingVector newWindow):vecs, newWindow)
+      where
+        newWindow = take (pre + succ + 1) (curr:oldWindow)
+    mkSpacingVector :: Glyph g =>
+                       [Maybe g]    -- ^ the glyphs in the moving window
+                    -> V.Vector Double
+    mkSpacingVector [] = V.empty
+    mkSpacingVector (g:[]) = V.concat
+      [ V.singleton $ fromIntegral $ fromEnum $ isJust g
+      , V.singleton $ fromIntegral $ fromEnum $ isNothing g
+      , fromMaybe (V.fromList $ take lenSingleVector $ repeat 0.0) $
+        fmap singleGlyphSpacingVector g
+      ]
+      where
+        -- adjust to length of singleGlyphSpacingVector
+        lenSingleVector = 8
+    mkSpacingVector (g1:g2:gs) = V.concat
+      [ mkSpacingVector (g1:[])
+      , (V.singleton $ fromMaybe 0.0 $ spaceBetween <$> g1 <*> g2)
+      , mkSpacingVector (g2:gs)
+      ]
 
--- | Generate shapes of data from zipped lists of 'LeftSpacing'
--- characters and 'Glyph's.
-trainingShapes :: Glyph g => [(LeftSpacing Char, g)] -> [(S ('D1 8), S ('D1 2))]
-trainingShapes = catMaybes . map trainingShape
+-- | Calculate the horizontal space in between two glyphs.
+spaceBetween :: (Glyph g) => g -> g -> Double
+spaceBetween g1 g2 = (xRight g1) - (xLeft g2)
+
+
+-- | Generate training data (or testing data) for a grenade network
+-- using 3 preceding and 3 succeding glyphs.
+mkTrainingShapes33
+  :: Glyph g =>
+     [LeftSpacing Char]
+  -> [g]
+  -> [(S ('D1 76), S('D1 2))]
+mkTrainingShapes33 chars glyphs =
+  catMaybes $
+  map trainingShape $
+  zip chars $
+  mkSpacingVectors 3 3 glyphs
+
+
+-- | Generate a shape of data for training or testing an ANN from a
+-- pair of 'Glyph' vector and 'LeftSpacing' character.
+--
+-- old non-generic signature:
+-- trainingShape :: (LeftSpacing Char, V.Vector Double) -> Maybe (S ('D1 76), S ('D1 2))
+trainingShape :: GHC.TypeNats.KnownNat n =>
+                 (LeftSpacing Char, V.Vector Double)
+              -> Maybe (S ('D1 n), S ('D1 2))
+trainingShape (SpaceAfter _, v) = (,) <$> (fromStorable v) <*> oneHot 1
+trainingShape (SpaceBefore _, v) = (,) <$> (fromStorable v) <*> oneHot 1
+trainingShape (NoSpace _, v) = (,) <$> (fromStorable v) <*> oneHot 0
