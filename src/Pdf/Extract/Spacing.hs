@@ -8,6 +8,7 @@ where
 -- | Analyse the inter-glyph spacing of a document. 
 
 import qualified Data.Text as T
+import qualified Data.Text.IO as T
 import Data.List
 import Data.Maybe
 import GHC.Generics hiding (S)
@@ -19,6 +20,8 @@ import Data.Semigroup
 import Grenade
 import Grenade.Utils.OneHot
 import GHC.TypeNats
+import Control.Monad.Random
+import Control.Monad.Except
 
 import Pdf.Extract.Glyph
 
@@ -125,12 +128,12 @@ singleGlyphSpacingVector g =
     charFeature f = fromIntegral . (fromMaybe 0 . (fmap (f . T.head))) . text
 
 -- | Generate data vectors from a line of 'Glyph's by moving a window
--- over the line. The number of preceding and succeding glyphs,
+-- over the line. The number of preceding and succeeding glyphs,
 -- i.e. the size of the window, is set by the first two arguments.
 mkSpacingVectors
   :: Glyph g =>
      Int                             -- ^ number of preceding glyphs in window
-  -> Int                             -- ^ number of succeding glyphs in window
+  -> Int                             -- ^ number of succeeding glyphs in window
   -> [g]                             -- ^ the line's glyphs
   -> [V.Vector Double]               -- ^ a vector of float values for each glyph
 mkSpacingVectors pre succ gs =
@@ -146,52 +149,101 @@ mkSpacingVectors pre succ gs =
     moveWindow (vecs, oldWindow) curr = ((mkSpacingVector newWindow):vecs, newWindow)
       where
         newWindow = take (pre + succ + 1) (curr:oldWindow)
-    mkSpacingVector :: Glyph g =>
-                       [Maybe g]    -- ^ the glyphs in the moving window
-                    -> V.Vector Double
-    mkSpacingVector [] = V.empty
-    mkSpacingVector (g:[]) = V.concat
-      [ V.singleton $ fromIntegral $ fromEnum $ isJust g
-      , V.singleton $ fromIntegral $ fromEnum $ isNothing g
-      , fromMaybe (V.fromList $ take lenSingleVector $ repeat 0.0) $
-        fmap singleGlyphSpacingVector g
-      ]
-      where
-        -- adjust to length of singleGlyphSpacingVector
-        lenSingleVector = 8
-    mkSpacingVector (g1:g2:gs) = V.concat
-      [ mkSpacingVector (g1:[])
-      , (V.singleton $ fromMaybe 0.0 $ spaceBetween <$> g1 <*> g2)
-      , mkSpacingVector (g2:gs)
-      ]
+
+
+mkSpacingVector :: Glyph g =>
+                   [Maybe g]    -- ^ the glyphs in the moving window
+                -> V.Vector Double
+mkSpacingVector [] = V.empty
+mkSpacingVector (g:[]) = V.concat
+  [ V.singleton $ fromIntegral $ fromEnum $ isJust g
+  , V.singleton $ fromIntegral $ fromEnum $ isNothing g
+  , fromMaybe (V.fromList $ take lenSingleVector $ repeat 0.0) $
+    fmap singleGlyphSpacingVector g
+  ]
+  where
+    -- adjust to length of singleGlyphSpacingVector
+    lenSingleVector = 8
+mkSpacingVector (g1:g2:gs) = V.concat
+  [ mkSpacingVector (g1:[])
+  , (V.singleton $ fromMaybe 0.0 $ spaceBetween <$> g1 <*> g2)
+  , mkSpacingVector (g2:gs)
+  ]
 
 -- | Calculate the horizontal space in between two glyphs.
 spaceBetween :: (Glyph g) => g -> g -> Double
 spaceBetween g1 g2 = (xRight g1) - (xLeft g2)
 
 
--- | Generate training data (or testing data) for a grenade network
--- using 3 preceding and 3 succeding glyphs.
-mkTrainingShapes33
-  :: Glyph g =>
-     [LeftSpacing Char]
-  -> [g]
-  -> [(S ('D1 76), S('D1 2))]
-mkTrainingShapes33 chars glyphs =
-  catMaybes $
-  map trainingShape $
-  zip chars $
-  mkSpacingVectors 3 3 glyphs
-
-
 -- | Generate a shape of data for training or testing an ANN from a
 -- pair of 'Glyph' vector and 'LeftSpacing' character.
---
--- old non-generic signature:
--- trainingShape :: (LeftSpacing Char, V.Vector Double) -> Maybe (S ('D1 76), S ('D1 2))
-trainingShape :: GHC.TypeNats.KnownNat n =>
-                 (LeftSpacing Char, V.Vector Double)
-              -> Maybe (S ('D1 n), S ('D1 2))
+trainingShape :: (LeftSpacing Char, V.Vector Double)
+              -> Maybe (SpacingShape, S ('D1 2))
 trainingShape (SpaceAfter _, v) = (,) <$> (fromStorable v) <*> oneHot 1
 trainingShape (SpaceBefore _, v) = (,) <$> (fromStorable v) <*> oneHot 1
 trainingShape (NoSpace _, v) = (,) <$> (fromStorable v) <*> oneHot 0
+
+
+-- | Verify training data (or testing data) and generate shaped data
+-- for a grenade network using 3 preceding and 3 succeeding
+-- glyphs. This takes a line of text from the set of training data and
+-- the corresponding line of glyphs as arguments. The verification
+-- tests if both lines contain the same sequence of characters.
+--
+-- Since the verification should give meaningful error reports, this
+-- is done in a monad, that can throw exceptions. See app for usage.
+mkTrainingShapes
+  :: (Glyph g, Monad m) =>
+     T.Text                     -- ^ a line of text from the training data
+  -> [g]                        -- ^ a line of glyphs
+  -> ExceptT String m [(SpacingShape, S('D1 2))]
+mkTrainingShapes txtLine glyphs' = do
+  let unspacedLine = representSpacesAfter $ T.unpack txtLine
+      glyphs = sortOn xLeft glyphs'
+      glyphsTxt = T.concat $ mapMaybe text glyphs
+  case (map withoutSpace unspacedLine) == (T.unpack glyphsTxt) of
+    True -> return ()
+    otherwise -> do
+      throwError $ T.unpack $ T.concat
+        [ "Error: Line of training data does not match PDF line\n"
+        , "Training data:\n"
+        , txtLine
+        , "\nPDF data:\n"
+        , glyphsTxt
+        , "\nInvalid training data\n"
+        ]
+  let td = catMaybes $
+           map trainingShape $
+           zip unspacedLine $
+           mkSpacingVectors pre succ glyphs
+  case (length td == length unspacedLine) of
+    False -> do
+      throwError "Error while generating training data"
+    True -> return ()
+  return td
+  where
+    -- adjust to 'SpacingShape'
+    pre = 3
+    succ = 3
+
+
+-- | The shape of data input into the ANN.
+--
+-- Note that this must be determined from the length of the vector
+-- returned by 'singleGlyphSpacingVector', 'mkSpacingVector' and the
+-- number of preceding and succeeding glyphs in 'mkTrainingShapes'.
+type SpacingShape = S ('D1 76)
+
+
+type SpacingNet
+  = Network
+    '[ FullyConnected 76 152, Logit,
+       FullyConnected 152 152, Logit,
+       FullyConnected 152 2, Logit]
+    '[ 'D1 76, 'D1 152, 'D1 152,
+       'D1 152, 'D1 152,
+       'D1 2, 'D1 2]
+
+
+randomSpacingNet :: MonadRandom m => m SpacingNet
+randomSpacingNet = randomNetwork

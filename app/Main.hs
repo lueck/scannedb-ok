@@ -22,6 +22,7 @@ import qualified Data.ByteString.Lazy.Char8 as C
 import Data.Tuple.Extra
 import qualified Data.HashMap.Lazy as M
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
+import Control.Monad.Except
 
 import Pdf.Extract.Lines
 import Pdf.Extract.Linearize
@@ -404,35 +405,26 @@ run (PdfToText _ outputMethod pages lineOpts spacing' lineCategorizer' nlp' inpu
         return ()
 run (TrainSpacing PdfMinerXml pages lineOpts inputFile trainingData) = do
   ranges <- parseRanges pages
-  spaced <- readFile trainingData
+  spaced <- T.readFile trainingData
   glyphs <- B.readFile inputFile >>= parseXml ranges
-  putStrLn "Verifying training data..."
+  putStr "Verifying training data..."
   let glyphLines = map (findLinesWindow lineOpts) glyphs
-      linesSpaced = map (representSpacesAfter . (filter (/=chr 12))) $
-                    filter (/="") $ -- remove empty lines
-                    filter (/=[chr 12]) $ -- and lines containing form feed only, e.g. last line
-                    lines spaced
-      linesByLines = zip linesSpaced (concat glyphLines)
-  trainingData <- mapM (\(spacedLine, glyphLine) -> do
-                           let glyphs = sortOn xLeft glyphLine
-                               txt = T.unpack $ T.concat $ mapMaybe text glyphs
-                           case (map withoutSpace spacedLine) == txt of
-                             True -> return ()
-                             otherwise -> do
-                               putStrLn "Error: Line of training data does not match PDF line"
-                               putStrLn "Training data:"
-                               putStrLn $ leftSpacingToString spacedLine
-                               putStrLn "PDF data:"
-                               putStrLn txt
-                               fail "Invalid training data"
-                           let td = mkTrainingShapes33 spacedLine glyphs
-                           case (length td == length spacedLine) of
-                             False -> do
-                               fail "Error while generating training data"
-                             True -> return ()
-                           return td) linesByLines
+      txtLines = map (T.filter (/=chr 12)) $ -- remove form feeds
+                 filter (/="") $ -- remove empty lines
+                 filter (/=(T.pack [chr 12])) $ -- and lines
+                                                -- containing form
+                                                -- feed only,
+                                                -- e.g. last line
+                 T.lines spaced
+      linesByLines = zip txtLines (concat glyphLines)
+  td <- runExceptT (mapM (uncurry mkTrainingShapes) linesByLines) >>= reportErrors
+  putStrLn " done"
   putStrLn "Training..."
   -- putStrLn $ show trainingData
+
+reportErrors :: Either String a -> IO a
+reportErrors (Right r) = return r
+reportErrors (Left err) = fail err
 
 
 parseRanges :: String -> IO [R.Range Int]

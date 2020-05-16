@@ -37,7 +37,7 @@ dependencies:
 - unordered-containers
 - vector
 - grenade
-
+- MonadRandom
 
 library:
   source-dirs: src
