@@ -1,14 +1,17 @@
 {-# LANGUAGE OverloadedStrings
 , TemplateHaskell
 , DeriveGeneric
-, DataKinds #-}
+, DataKinds
+, BangPatterns
+, TupleSections
+, TypeFamilies
+, FlexibleContexts #-}
 module Pdf.Extract.Spacing
 where
 
 -- | Analyse the inter-glyph spacing of a document. 
 
 import qualified Data.Text as T
-import qualified Data.Text.IO as T
 import Data.List
 import Data.Maybe
 import GHC.Generics hiding (S)
@@ -21,7 +24,9 @@ import Grenade
 import Grenade.Utils.OneHot
 import GHC.TypeNats
 import Control.Monad.Random
-import Control.Monad.Except
+import Numeric.LinearAlgebra ( maxIndex )
+import qualified Numeric.LinearAlgebra.Static as SA
+
 
 import Pdf.Extract.Glyph
 
@@ -178,7 +183,7 @@ spaceBetween g1 g2 = (xRight g1) - (xLeft g2)
 -- | Generate a shape of data for training or testing an ANN from a
 -- pair of 'Glyph' vector and 'LeftSpacing' character.
 trainingShape :: (LeftSpacing Char, V.Vector Double)
-              -> Maybe (SpacingShape, S ('D1 2))
+              -> Maybe SpacingRow
 trainingShape (SpaceAfter _, v) = (,) <$> (fromStorable v) <*> oneHot 1
 trainingShape (SpaceBefore _, v) = (,) <$> (fromStorable v) <*> oneHot 1
 trainingShape (NoSpace _, v) = (,) <$> (fromStorable v) <*> oneHot 0
@@ -188,40 +193,45 @@ trainingShape (NoSpace _, v) = (,) <$> (fromStorable v) <*> oneHot 0
 -- for a grenade network using 3 preceding and 3 succeeding
 -- glyphs. This takes a line of text from the set of training data and
 -- the corresponding line of glyphs as arguments. The verification
--- tests if both lines contain the same sequence of characters.
+-- tests if both lines contain the same sequence of characters. It is
+-- also verified, that a shape was generated for each input glyph.
 --
--- Since the verification should give meaningful error reports, this
--- is done in a monad, that can throw exceptions. See app for usage.
+-- If the verification fails, a 'Left' value is returned with an error
+-- string.
 mkTrainingShapes
-  :: (Glyph g, Monad m) =>
+  :: (Glyph g) =>
      T.Text                     -- ^ a line of text from the training data
   -> [g]                        -- ^ a line of glyphs
-  -> ExceptT String m [(SpacingShape, S('D1 2))]
-mkTrainingShapes txtLine glyphs' = do
-  let unspacedLine = representSpacesAfter $ T.unpack txtLine
-      glyphs = sortOn xLeft glyphs'
-      glyphsTxt = T.concat $ mapMaybe text glyphs
-  case (map withoutSpace unspacedLine) == (T.unpack glyphsTxt) of
-    True -> return ()
-    otherwise -> do
-      throwError $ T.unpack $ T.concat
-        [ "Error: Line of training data does not match PDF line\n"
-        , "Training data:\n"
-        , txtLine
-        , "\nPDF data:\n"
-        , glyphsTxt
-        , "\nInvalid training data\n"
-        ]
-  let td = catMaybes $
-           map trainingShape $
-           zip unspacedLine $
-           mkSpacingVectors pre succ glyphs
-  case (length td == length unspacedLine) of
-    False -> do
-      throwError "Error while generating training data"
-    True -> return ()
-  return td
+  -> Either String [SpacingRow]
+mkTrainingShapes txtLine glyphs' =
+  join $
+  fmap ((ifEitherP
+         ((== (length unspacedLine)) . length)
+         (const "Error while generating training data: input vector does not fit into shape")
+         id) .
+        catMaybes .
+        (map trainingShape) .
+        (zip unspacedLine) .
+        (mkSpacingVectors pre succ)) $
+  ifEitherP
+  ((==(map withoutSpace unspacedLine)) . T.unpack . glyphsTxt)
+  (T.unpack .
+   T.concat .
+   ([ "Error: Line of training data does not match PDF line\n"
+       , "Training data:\n"
+       , txtLine
+       , "\nPDF data:\n"] ++) .
+   (:[]) .
+   glyphsTxt)
+  id
+  glyphs
   where
+    ifEitherP p l r val
+      | p val = Right $ r val
+      | otherwise = Left $ l val
+    unspacedLine = representSpacesAfter $ T.unpack txtLine
+    glyphs = sortOn xLeft glyphs'
+    glyphsTxt = T.concat . mapMaybe text -- glyphs
     -- adjust to 'SpacingShape'
     pre = 3
     succ = 3
@@ -234,6 +244,9 @@ mkTrainingShapes txtLine glyphs' = do
 -- number of preceding and succeeding glyphs in 'mkTrainingShapes'.
 type SpacingShape = S ('D1 76)
 
+type SpacingOutput = S ('D1 2)
+
+type SpacingRow = (SpacingShape, SpacingOutput) 
 
 type SpacingNet
   = Network
@@ -247,3 +260,61 @@ type SpacingNet
 
 randomSpacingNet :: MonadRandom m => m SpacingNet
 randomSpacingNet = randomNetwork
+
+
+spaceLearningParams :: LearningParameters
+spaceLearningParams = LearningParameters 0.01 0.9 0.0005
+
+
+-- trainSpacingRow :: LearningParameters -> SpacingNet -> SpacingRow -> SpacingNet
+-- trainSpacingRow lp net (input, output) = train lp net input output
+
+-- testSpacingRow :: SpacingNet -> SpacingRow -> (S ('D1 2), S ('D1 2))
+-- testSpacingRow net (rowInput, wishedOutput) = (wishedOutput, runNet net rowInput)
+
+-- getSpacingLabels :: (SpacingOutput, SpacingOutput) -> (Int, Int)
+-- getSpacingLabels (S1D wishedLabel, S1D actualOutput) =
+--   (maxIndex (extract wishedLabel), maxIndex (extract actualOutput))
+
+
+runSpacingIteration
+  :: [SpacingRow]               -- ^ training data
+  -> [SpacingRow]               -- ^ testing data
+  -> LearningParameters         -- ^ learning rate
+  -> SpacingNet                 -- ^ the current network
+  -> Int                        -- ^ iteration number
+  -> IO SpacingNet              -- ^ returns a new network
+runSpacingIteration trainRows validateRows rate net i = do
+  let trained' = foldl' (trainEach ( rate { learningRate = learningRate rate * 0.9 ^ i} )) net trainRows
+  let res = fmap (\(rowP,rowL) -> (rowL,) $ runNet trained' rowP) validateRows
+  let res' = fmap (\(S1D label, S1D prediction) -> (maxIndex (SA.extract label), maxIndex (SA.extract prediction))) res
+  putStrLn $ "Iteration " ++ show i ++ ": " ++ show (length (filter ((==) <$> fst <*> snd) res')) ++ " of " ++ show (length res')
+  --print trained'
+  return trained'
+  where
+    trainEach rate' !network (i, o) = train rate' network i o
+
+
+runSpacingNet :: SpacingNet -> Char -> SpacingShape -> LeftSpacing Char
+runSpacingNet net char input =
+  spaceFromLabel char $ runNet net input
+
+
+spaceFromLabel :: a -> SpacingOutput -> LeftSpacing a
+spaceFromLabel char (S1D label) = mkSpace char $ maxIndex $ SA.extract label
+  where
+    mkSpace char 0 = NoSpace char
+    mkSpace char 1 = SpaceAfter char
+
+
+runSpacingNetOnLine :: Glyph g => SpacingNet -> [g] -> Either String T.Text
+runSpacingNetOnLine network glyphs' =
+  fmap (T.pack .
+        leftSpacingToString .
+        (map (uncurry (runSpacingNet network))) .
+        (zip (T.unpack glyphsTxt)) .
+        (map fst)) $
+  mkTrainingShapes glyphsTxt glyphs
+  where
+    glyphs = sortOn xLeft glyphs'
+    glyphsTxt = T.concat $ mapMaybe text glyphs

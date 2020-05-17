@@ -22,7 +22,6 @@ import qualified Data.ByteString.Lazy.Char8 as C
 import Data.Tuple.Extra
 import qualified Data.HashMap.Lazy as M
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
-import Control.Monad.Except
 
 import Pdf.Extract.Lines
 import Pdf.Extract.Linearize
@@ -417,10 +416,16 @@ run (TrainSpacing PdfMinerXml pages lineOpts inputFile trainingData) = do
                                                 -- e.g. last line
                  T.lines spaced
       linesByLines = zip txtLines (concat glyphLines)
-  td <- runExceptT (mapM (uncurry mkTrainingShapes) linesByLines) >>= reportErrors
+  td <- mapM reportErrors $ map (uncurry mkTrainingShapes) linesByLines
   putStrLn " done"
-  putStrLn "Training..."
-  -- putStrLn $ show trainingData
+  putStr "Training..."
+  initialNet <- randomSpacingNet
+  trained <- foldM (runSpacingIteration (concat td) (concat td) spaceLearningParams) initialNet [1..100]
+  putStrLn " done"
+  mapM_ (\gs -> do
+            l <- reportErrors $ runSpacingNetOnLine trained gs
+            T.putStrLn l) (concat glyphLines)
+
 
 reportErrors :: Either String a -> IO a
 reportErrors (Right r) = return r

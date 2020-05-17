@@ -38,6 +38,8 @@ dependencies:
 - vector
 - grenade
 - MonadRandom
+- hmatrix >= 0.18 && < 0.21
+
 
 library:
   source-dirs: src
