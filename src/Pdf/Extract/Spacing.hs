@@ -26,7 +26,7 @@ import GHC.TypeNats
 import Control.Monad.Random
 import Numeric.LinearAlgebra ( maxIndex )
 import qualified Numeric.LinearAlgebra.Static as SA
-
+import System.IO
 
 import Pdf.Extract.Glyph
 
@@ -278,17 +278,18 @@ spaceLearningParams = LearningParameters 0.01 0.9 0.0005
 
 
 runSpacingIteration
-  :: [SpacingRow]               -- ^ training data
+  :: Handle                     -- ^ a file handle for logging
+  -> [SpacingRow]               -- ^ training data
   -> [SpacingRow]               -- ^ testing data
   -> LearningParameters         -- ^ learning rate
   -> SpacingNet                 -- ^ the current network
   -> Int                        -- ^ iteration number
   -> IO SpacingNet              -- ^ returns a new network
-runSpacingIteration trainRows validateRows rate net i = do
+runSpacingIteration log trainRows validateRows rate net i = do
   let trained' = foldl' (trainEach ( rate { learningRate = learningRate rate * 0.9 ^ i} )) net trainRows
   let res = fmap (\(rowP,rowL) -> (rowL,) $ runNet trained' rowP) validateRows
   let res' = fmap (\(S1D label, S1D prediction) -> (maxIndex (SA.extract label), maxIndex (SA.extract prediction))) res
-  putStrLn $ "Iteration " ++ show i ++ ": " ++ show (length (filter ((==) <$> fst <*> snd) res')) ++ " of " ++ show (length res')
+  hPutStrLn log $ "Iteration " ++ show i ++ ": " ++ show (length (filter ((==) <$> fst <*> snd) res')) ++ " of " ++ show (length res')
   --print trained'
   return trained'
   where

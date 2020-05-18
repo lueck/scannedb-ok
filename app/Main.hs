@@ -22,6 +22,7 @@ import qualified Data.ByteString.Lazy.Char8 as C
 import Data.Tuple.Extra
 import qualified Data.HashMap.Lazy as M
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
+import Grenade
 
 import Pdf.Extract.Lines
 import Pdf.Extract.Linearize
@@ -52,6 +53,7 @@ data ExtractionCommand
   , lineOpts :: LineOptions
   , inputFile :: String
   , trainingData :: FilePath
+  , learningParameters :: LearningParameters
   }
 
 -- | A record for the output command line argument 
@@ -190,6 +192,20 @@ trainSpacing_ = TrainSpacing
                     <> help "Path to the input file.")
   <*> argument str (metavar "TRAININGDATA"
                     <> help "Path to the training data.")
+  <*> (LearningParameters
+       <$> option auto (long "rate"
+                        <> help "Learning rate"
+                        <> value 0.01
+                        <> showDefault)
+       <*> option auto (long "momentum"
+                        <> help "Learning momentum"
+                        <> value 0.9
+                        <> showDefault)
+       <*> option auto (long "l2"
+                        <> help "Learning regulizer"
+                        <> value 0.0005
+                        <> showDefault))
+
 
 command_ :: Parser ExtractionCommand
 command_ = subparser
@@ -402,11 +418,11 @@ run (PdfToText _ outputMethod pages lineOpts spacing' lineCategorizer' nlp' inpu
         glyphs :: [[P.Glyph]] <- mapM (extractPdfPageGlyphs rootNode) pages
         extract outputMethod lineOpts spacing' (nlpOutput nlp' lineCategorizer') $ zip pages glyphs
         return ()
-run (TrainSpacing PdfMinerXml pages lineOpts inputFile trainingData) = do
+run (TrainSpacing PdfMinerXml pages lineOpts inputFile trainingData rate) = do
   ranges <- parseRanges pages
   spaced <- T.readFile trainingData
   glyphs <- B.readFile inputFile >>= parseXml ranges
-  putStr "Verifying training data..."
+  hPutStr stderr "Verifying training data..."
   let glyphLines = map (findLinesWindow lineOpts) glyphs
       txtLines = map (T.filter (/=chr 12)) $ -- remove form feeds
                  filter (/="") $ -- remove empty lines
@@ -417,11 +433,12 @@ run (TrainSpacing PdfMinerXml pages lineOpts inputFile trainingData) = do
                  T.lines spaced
       linesByLines = zip txtLines (concat glyphLines)
   td <- mapM reportErrors $ map (uncurry mkTrainingShapes) linesByLines
-  putStrLn " done"
-  putStr "Training..."
+  hPutStrLn stderr " done"
+  hPutStr stderr "Training..."
   initialNet <- randomSpacingNet
-  trained <- foldM (runSpacingIteration (concat td) (concat td) spaceLearningParams) initialNet [1..100]
-  putStrLn " done"
+  trained <- foldM (runSpacingIteration stderr (concat td) (concat td) rate) initialNet [1..100]
+  hPutStrLn stderr " done"
+  hPutStrLn stderr "Trained network run on training data:"
   mapM_ (\gs -> do
             l <- reportErrors $ runSpacingNetOnLine trained gs
             T.putStrLn l) (concat glyphLines)
