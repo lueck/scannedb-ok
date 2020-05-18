@@ -439,6 +439,7 @@ run (TrainSpacing PdfMinerXml pages lineOpts inputFile trainingData rate) = do
   trained <- foldM (runSpacingIteration stderr (concat td) (concat td) rate) initialNet [1..100]
   hPutStrLn stderr " done"
   hPutStrLn stderr "Trained network run on training data:"
+  print td
   mapM_ (\gs -> do
             l <- reportErrors $ runSpacingNetOnLine trained gs
             T.putStrLn l) (concat glyphLines)

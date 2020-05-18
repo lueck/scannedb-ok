@@ -120,10 +120,11 @@ leftSpacingToString ((SpaceBefore a):xs) = ' ' : a : (leftSpacingToString xs)
 singleGlyphSpacingVector :: Glyph g => g -> V.Vector Double
 singleGlyphSpacingVector g =
   V.fromList $
-  [ xLeft g
-  , xRight g
-  , width g
-  , size g
+  [ -- width g
+  -- , size g
+  -- ,
+    (width g) / (size g)
+  , (size g) / (width g)
   , charFeature ord g -- ordinal
   , charFeature (fromEnum . isUpper) g
   , charFeature (fromEnum . isLower) g
@@ -144,14 +145,14 @@ mkSpacingVectors
 mkSpacingVectors pre succ gs =
   take (length gs) $ drop pre $
   fst $
-  foldl' moveWindow ([], (take pre $ repeat Nothing)) $
+  foldr moveWindow ([], (take pre $ repeat Nothing)) $
   ((take pre $ repeat Nothing) ++ (map Just gs) ++ (take succ $ repeat Nothing))
   where
     moveWindow :: Glyph g =>
-                  ([V.Vector Double], [Maybe g])
-               -> Maybe g
+                  Maybe g
                -> ([V.Vector Double], [Maybe g])
-    moveWindow (vecs, oldWindow) curr = ((mkSpacingVector newWindow):vecs, newWindow)
+               -> ([V.Vector Double], [Maybe g])
+    moveWindow curr (vecs, oldWindow) = ((mkSpacingVector newWindow):vecs, newWindow)
       where
         newWindow = take (pre + succ + 1) (curr:oldWindow)
 
@@ -161,23 +162,27 @@ mkSpacingVector :: Glyph g =>
                 -> V.Vector Double
 mkSpacingVector [] = V.empty
 mkSpacingVector (g:[]) = V.concat
-  [ V.singleton $ fromIntegral $ fromEnum $ isJust g
+  [ V.singleton 10.0 -- control
+  , V.singleton $ fromIntegral $ fromEnum $ isJust g
   , V.singleton $ fromIntegral $ fromEnum $ isNothing g
   , fromMaybe (V.fromList $ take lenSingleVector $ repeat 0.0) $
     fmap singleGlyphSpacingVector g
   ]
   where
-    -- adjust to length of singleGlyphSpacingVector
-    lenSingleVector = 8
+    -- SHAPE: adjust to length of singleGlyphSpacingVector
+    lenSingleVector = 6
 mkSpacingVector (g1:g2:gs) = V.concat
   [ mkSpacingVector (g1:[])
-  , (V.singleton $ fromMaybe 0.0 $ spaceBetween <$> g1 <*> g2)
+  , (V.singleton $ fromMaybe 0.0 $ dist)
+  , (V.singleton $ fromMaybe 0.0 $ (/) <$> dist <*> fmap width g1)
   , mkSpacingVector (g2:gs)
   ]
+  where
+    dist = spaceBetween <$> g1 <*> g2
 
 -- | Calculate the horizontal space in between two glyphs.
 spaceBetween :: (Glyph g) => g -> g -> Double
-spaceBetween g1 g2 = (xRight g1) - (xLeft g2)
+spaceBetween g1 g2 = abs $ (xLeft g1) - (xLeft g2)
 
 
 -- | Generate a shape of data for training or testing an ANN from a
@@ -232,9 +237,9 @@ mkTrainingShapes txtLine glyphs' =
     unspacedLine = representSpacesAfter $ T.unpack txtLine
     glyphs = sortOn xLeft glyphs'
     glyphsTxt = T.concat . mapMaybe text -- glyphs
-    -- adjust to 'SpacingShape'
-    pre = 3
-    succ = 3
+    -- SHAPE: adjust to 'SpacingShape'
+    pre = 0
+    succ = 1
 
 
 -- | The shape of data input into the ANN.
@@ -242,7 +247,7 @@ mkTrainingShapes txtLine glyphs' =
 -- Note that this must be determined from the length of the vector
 -- returned by 'singleGlyphSpacingVector', 'mkSpacingVector' and the
 -- number of preceding and succeeding glyphs in 'mkTrainingShapes'.
-type SpacingShape = S ('D1 76)
+type SpacingShape = S ('D1 20)
 
 type SpacingOutput = S ('D1 2)
 
@@ -250,11 +255,11 @@ type SpacingRow = (SpacingShape, SpacingOutput)
 
 type SpacingNet
   = Network
-    '[ FullyConnected 76 152, Logit,
-       FullyConnected 152 152, Logit,
-       FullyConnected 152 2, Logit]
-    '[ 'D1 76, 'D1 152, 'D1 152,
-       'D1 152, 'D1 152,
+    '[ FullyConnected 20 80, Logit,
+       FullyConnected 80 80, Logit,
+       FullyConnected 80 2, Logit]
+    '[ 'D1 20, 'D1 80, 'D1 80,
+       'D1 80, 'D1 80,
        'D1 2, 'D1 2]
 
 
