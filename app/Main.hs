@@ -49,11 +49,12 @@ data ExtractionCommand
   }
   | TrainSpacing
   { inputMethod :: InputMethod
-  , pages :: String
   , lineOpts :: LineOptions
-  , inputFile :: String
-  , trainingData :: FilePath
   , learningParameters :: LearningParameters
+  , trainingPDF :: FilePath     -- ^ file with glyphs (PDF, XML etc.) for training
+  , trainingTxt :: FilePath     -- ^ plaintext file with spaces for training
+  , validationPDF :: FilePath   -- ^ file with glyphs (PDF, XML, etc.) for validation
+  , validationTxt :: FilePath   -- ^ plaintext file with spaces for validation
   }
 
 -- | A record for the output command line argument 
@@ -186,12 +187,7 @@ pdfToText_ = PdfToText
 trainSpacing_ :: Parser ExtractionCommand
 trainSpacing_ = TrainSpacing
   <$> inputMethod_
-  <*> pages_
   <*> lineOpts_
-  <*> argument str (metavar "INFILE"
-                    <> help "Path to the input file.")
-  <*> argument str (metavar "TRAININGDATA"
-                    <> help "Path to the training data.")
   <*> (LearningParameters
        <$> option auto (long "rate"
                         <> help "Learning rate"
@@ -199,12 +195,20 @@ trainSpacing_ = TrainSpacing
                         <> showDefault)
        <*> option auto (long "momentum"
                         <> help "Learning momentum"
-                        <> value 0.9
+                        <> value 0.1
                         <> showDefault)
        <*> option auto (long "l2"
                         <> help "Learning regulizer"
                         <> value 0.0005
                         <> showDefault))
+  <*> argument str (metavar "TRAININGPDF"
+                    <> help "Path to PDF (or XML) with training text.")
+  <*> argument str (metavar "TRAININGTEXT"
+                    <> help "Path to plaintext with correct spaces which corresponds exactly to TRAININGPDF.")
+  <*> argument str (metavar "VALIDATIONPDF"
+                    <> help "Path to PDF (or XML) with validation text.")
+  <*> argument str (metavar "VALIDATIONTEXT"
+                    <> help "Path to plaintext with correct spaces which corresponds exactly to VALIDATIONPDF.")
 
 
 command_ :: Parser ExtractionCommand
@@ -219,7 +223,7 @@ command_ = subparser
    (info
     (helper <*> trainSpacing_)
     (fullDesc
-     <> progDesc "scannedb-ok trainSpacing   trains an ANN for inter-glyph spacing."
+     <> progDesc "scannedb-ok trainSpacing   trains an ANN for inter-glyph spacing. This requires four input files: TRAININGPDF and TRAININGTXT must contain exactly the same text, once in PDF format (or some other format conaining glyph descriptions, like pdfminers xml), and once as plaintext with correct spaces. This pair of files is used for training the neurons. VALIDATIONPDF and VALIDATIONTXT have to be exactly corresponding texts, too. They are used to validate the trained network after each learning iteration and the validation result is logged, so that the progression can be observed. For a start, you can simply reuse the first pair of files as validation texts."
      <> header "scannedb-ok trainSpacing - train spacing module.")))
 
 
@@ -418,31 +422,33 @@ run (PdfToText _ outputMethod pages lineOpts spacing' lineCategorizer' nlp' inpu
         glyphs :: [[P.Glyph]] <- mapM (extractPdfPageGlyphs rootNode) pages
         extract outputMethod lineOpts spacing' (nlpOutput nlp' lineCategorizer') $ zip pages glyphs
         return ()
-run (TrainSpacing PdfMinerXml pages lineOpts inputFile trainingData rate) = do
-  ranges <- parseRanges pages
-  spaced <- T.readFile trainingData
-  glyphs <- B.readFile inputFile >>= parseXml ranges
-  hPutStr stderr "Verifying training data..."
+run (TrainSpacing PdfMinerXml lineOpts rate trainingPdf trainingTxt validationPdf validationTxt) = do
+  ranges <- parseRanges "*"
+  spaced <- T.readFile trainingTxt
+  glyphs <- B.readFile trainingPdf >>= parseXml ranges
+  validationSpaced <- T.readFile validationTxt
+  validationGlyphs <- B.readFile validationPdf >>= parseXml ranges
   let glyphLines = map (findLinesWindow lineOpts) glyphs
-      txtLines = map (T.filter (/=chr 12)) $ -- remove form feeds
-                 filter (/="") $ -- remove empty lines
-                 filter (/=(T.pack [chr 12])) $ -- and lines
-                                                -- containing form
-                                                -- feed only,
-                                                -- e.g. last line
-                 T.lines spaced
+      txtLines = cleanForSpaceTraining spaced
       linesByLines = zip txtLines (concat glyphLines)
+      validationGlyphLines = map (findLinesWindow lineOpts) validationGlyphs
+      validationTxtLines = cleanForSpaceTraining validationSpaced
+      validationLinesByLines = zip validationTxtLines (concat validationGlyphLines)
+  hPutStr stderr "Verifying training data..."
   td <- mapM reportErrors $ map (uncurry mkTrainingShapes) linesByLines
+  hPutStrLn stderr " done"
+  hPutStr stderr "Verifying validation data..."
+  vd <- mapM reportErrors $ map (uncurry mkTrainingShapes) validationLinesByLines
   hPutStrLn stderr " done"
   hPutStr stderr "Training..."
   initialNet <- randomSpacingNet
-  trained <- foldM (runSpacingIteration stderr (concat td) (concat td) rate) initialNet [1..100]
+  trained <- foldM (runSpacingIteration stderr (concat td) (concat vd) rate) initialNet [1..100]
   hPutStrLn stderr " done"
-  hPutStrLn stderr "Trained network run on training data:"
-  print td
+  hPutStrLn stderr "Trained network run on validation data:"
+  -- print td
   mapM_ (\gs -> do
             l <- reportErrors $ runSpacingNetOnLine trained gs
-            T.putStrLn l) (concat glyphLines)
+            T.putStrLn l) (concat validationGlyphLines)
 
 
 reportErrors :: Either String a -> IO a

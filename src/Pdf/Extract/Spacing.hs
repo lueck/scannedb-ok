@@ -116,6 +116,16 @@ leftSpacingToString ((SpaceAfter a):xs) = a : ' ' : (leftSpacingToString xs)
 leftSpacingToString ((SpaceBefore a):xs) = ' ' : a : (leftSpacingToString xs)
 
 
+-- | Helper function for cleaning plain text for training.
+cleanForSpaceTraining :: T.Text -> [T.Text]
+cleanForSpaceTraining =
+  map (T.filter (/=chr 12)) . -- remove form feeds
+  filter (/="") . -- remove empty lines
+  filter (/=(T.pack [chr 12])) . -- remove lines containing form feed
+                                 -- only, e.g. last line
+  T.lines -- split into lines
+
+
 -- | Generate a data vector from a 'Glyph'.
 singleGlyphSpacingVector :: Glyph g => g -> V.Vector Double
 singleGlyphSpacingVector g =
