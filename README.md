@@ -24,7 +24,9 @@ extract two or more columns, though.
 ## Features
 
 - collects glyphs of each line by a clustering algorithm
-- inserts inter-word spaces based on adjustable factors
+- inserts inter-word spaces based on adjustable factors. There is also
+  an experimental command for training an artificial neural network
+  for inserting spaces on the ANN branch.
 - drops glyphs outside of the type area
 - drops single glyphs between lines
 - identifies types of lines: e.g. first line of paragraph, page
@@ -98,6 +100,9 @@ inter-word spaces turned out to work good based on a fixed factor: If
 the distance to the next glyph exceeds the product of the width and a
 fixed spacing factor, then insert a space. The factor may be changed
 with a command line argument.
+
+I'm currently working on training an artificial neural network for
+recognizing where to insert spaces. See the ANN branch.
 
 ### Collect the glyphs of a Line
 
