@@ -313,11 +313,24 @@ runSpacingIteration log trainRows validateRows rate net i = do
   let trained' = foldl' (trainEach ( rate { learningRate = learningRate rate * 0.9 ^ i} )) net trainRows
   let res = fmap (\(rowP,rowL) -> (rowL,) $ runNet trained' rowP) validateRows
   let res' = fmap (\(S1D label, S1D prediction) -> (maxIndex (SA.extract label), maxIndex (SA.extract prediction))) res
-  hPutStrLn log $ "Iteration " ++ show i ++ ": " ++ show (length (filter ((==) <$> fst <*> snd) res')) ++ " of " ++ show (length res')
+      truePos = length $ filter ((&&) <$> (==1) . fst <*> (==1) . snd) res'
+      falsePos = length $ filter ((<) <$> fst <*> snd) res'
+      trueNegs = length $ filter ((&&) <$> (==0) . fst <*> (==0) . snd) res'
+      falseNegs = length $ filter ((>) <$> fst <*> snd) res'
+      precision = (fromIntegral truePos) / (fromIntegral $ truePos + falsePos)
+      recall = (fromIntegral truePos) / (fromIntegral $ truePos + falseNegs)
+  hPutStrLn log $ "Iteration " ++
+    show i ++ ": " ++
+    show (length (filter ((==) <$> fst <*> snd) res')) ++ " of " ++ show (length res') ++
+    ", false negatives: " ++ show falseNegs ++
+    ", false positives: " ++ show falsePos ++
+    ", precision: " ++ show precision ++
+    ", recall: " ++ show recall
   --print trained'
   return trained'
   where
     trainEach rate' !network (i, o) = train rate' network i o
+
 
 
 -- | Run the trained network a line of 'Glyph's.
