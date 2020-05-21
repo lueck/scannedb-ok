@@ -130,12 +130,12 @@ cleanForSpaceTraining =
 singleGlyphSpacingVector :: Glyph g => g -> V.Vector Double
 singleGlyphSpacingVector g =
   V.fromList $
-  [ -- width g
-  -- , size g
-  -- ,
-    (width g) / (size g)
+  [ (width g) / (size g)
   , (size g) / (width g)
-  , charFeature ord g -- ordinal
+  , fromIntegral $ fromEnum $ (size g) < (width g)
+  , fromIntegral $ fromEnum $ (size g) == (width g)
+  , fromIntegral $ fromEnum $ (size g) > (width g)
+  -- , charFeature ord g -- ordinal, causes noise in data and bad results
   , charFeature (fromEnum . isUpper) g
   , charFeature (fromEnum . isLower) g
   , charFeature (fromEnum . (`elem` (",;:.!?"::[Char]))) g
@@ -172,18 +172,16 @@ mkSpacingVector :: Glyph g =>
                 -> V.Vector Double
 mkSpacingVector [] = V.empty
 mkSpacingVector (g:[]) = V.concat
-  [ V.singleton 10.0 -- control
-  , V.singleton $ fromIntegral $ fromEnum $ isJust g
+  [ V.singleton $ fromIntegral $ fromEnum $ isJust g
   , V.singleton $ fromIntegral $ fromEnum $ isNothing g
   , fromMaybe (V.fromList $ take lenSingleVector $ repeat 0.0) $
     fmap singleGlyphSpacingVector g
   ]
   where
     -- SHAPE: adjust to length of singleGlyphSpacingVector
-    lenSingleVector = 6
+    lenSingleVector = 8
 mkSpacingVector (g1:g2:gs) = V.concat
   [ mkSpacingVector (g1:[])
-  , (V.singleton $ fromMaybe 0.0 $ dist)
   , (V.singleton $ fromMaybe 0.0 $ (/) <$> dist <*> fmap width g1)
   , mkSpacingVector (g2:gs)
   ]
@@ -192,7 +190,7 @@ mkSpacingVector (g1:g2:gs) = V.concat
 
 -- | Calculate the horizontal space in between two glyphs.
 spaceBetween :: (Glyph g) => g -> g -> Double
-spaceBetween g1 g2 = abs $ (xLeft g1) - (xLeft g2)
+spaceBetween g1 g2 = abs $ (xLeft g2) - (xRight g1)
 
 
 -- | Generate a shape of data for training or testing an ANN from a
@@ -257,7 +255,7 @@ mkTrainingShapes txtLine glyphs' =
 -- Note that this must be determined from the length of the vector
 -- returned by 'singleGlyphSpacingVector', 'mkSpacingVector' and the
 -- number of preceding and succeeding glyphs in 'mkTrainingShapes'.
-type SpacingShape = S ('D1 20)
+type SpacingShape = S ('D1 21)
 
 type SpacingOutput = S ('D1 2)
 
@@ -265,11 +263,15 @@ type SpacingRow = (SpacingShape, SpacingOutput)
 
 type SpacingNet
   = Network
-    '[ FullyConnected 20 80, Logit,
-       FullyConnected 80 80, Logit,
-       FullyConnected 80 2, Logit]
-    '[ 'D1 20, 'D1 80, 'D1 80,
-       'D1 80, 'D1 80,
+    '[ FullyConnected 21 92, Logit,
+       FullyConnected 92 92, Logit,
+       FullyConnected 92 92, Logit,
+       -- FullyConnected 92 92, Logit,
+       FullyConnected 92 2, Logit]
+    '[ 'D1 21, 'D1 92, 'D1 92,
+       'D1 92, 'D1 92,
+       'D1 92, 'D1 92,
+       -- 'D1 92, 'D1 92,
        'D1 2, 'D1 2]
 
 
