@@ -75,22 +75,33 @@ spacingsInLine l p (g1:g2:gs) =
   ++ spacingsInLine l p (g2:gs)
 
 
--- * ANN
+-- * Artificial neural network for inserting inter-word spaces
 
--- | For the inter-word-spacing ANN we represent the characters of a
--- line without the spaces. Therefore we wrap each character in a
--- 'Spacing' record. Maybe we shoult make this record a functor. This
--- wrapping is done by the 'representSpacesAfter' function. The
--- resulting list can easily be parallelized with the list of glyphs
--- for the line.
+-- | For training the inter-word-spacing ANN, the characters of a line
+-- must be represented without the spaces. Therefore each character is
+-- wrapped in a 'LeftSpacing' record. This wrapping is done by the
+-- 'representSpacesAfter' function. The resulting list can easily be
+-- parallelized with the list of glyphs for the line.
+--
+-- The record is generic an can be reused to represent spaces between
+-- 'Glyph's, too.
 
--- | A wrapper for representing spaces.
+-- | A wrapper for representing spaces. Actually only 'SpaceAfter' and
+-- 'NoSpace' is used, the others are for making it conceptionally
+-- complete.
 data LeftSpacing a
-  = SpaceBefore a
-  | SpaceAfter a
-  | NoSpace a
+  = SpaceBefore a               -- ^ Represents a character or 'Glyph'
+                                -- with a space before it.
+  | SpaceAfter a                -- ^ Represents a character or 'Glyph'
+                                -- with a space after it.
+  | SpaceAround a               -- ^ Represents a character or 'Glyph'
+                                -- with spaces around it.
+  | NoSpace a                   -- ^ Represents a character or 'Glyph'
+                                -- with neither space before nor after
+                                -- it.
   deriving (Show, Eq)
 
+-- | Unwrap a 'LeftSpacing' item.
 withoutSpace :: LeftSpacing a -> a
 withoutSpace (SpaceBefore a) = a
 withoutSpace (SpaceAfter a) = a
@@ -119,11 +130,11 @@ leftSpacingToString ((SpaceBefore a):xs) = ' ' : a : (leftSpacingToString xs)
 -- | Helper function for cleaning plain text for training.
 cleanForSpaceTraining :: T.Text -> [T.Text]
 cleanForSpaceTraining =
-  map (T.filter (/=chr 12)) . -- remove form feeds
-  filter (/="") . -- remove empty lines
+  map (T.filter (/=chr 12)) .    -- remove form feeds
+  filter (/="") .                -- remove empty lines
   filter (/=(T.pack [chr 12])) . -- remove lines containing form feed
                                  -- only, e.g. last line
-  T.lines -- split into lines
+  T.lines                        -- split into lines
 
 
 -- | Generate a data vector from a 'Glyph'.
@@ -145,7 +156,13 @@ singleGlyphSpacingVector g =
 
 -- | Generate data vectors from a line of 'Glyph's by moving a window
 -- over the line. The number of preceding and succeeding glyphs,
--- i.e. the size of the window, is set by the first two arguments.
+-- i.e. the size of the window, is set by the first two
+-- arguments.
+--
+-- Missing predecessors (in the beginning of a line) or missing
+-- successors (at the end of a line) are represented as missing by
+-- one-hot encoded presence/missing vector entries. See
+-- 'mkSpacingVector' for details.
 mkSpacingVectors
   :: Glyph g =>
      Int                             -- ^ number of preceding glyphs in window
@@ -166,7 +183,7 @@ mkSpacingVectors pre succ gs =
       where
         newWindow = take (pre + succ + 1) (curr:oldWindow)
 
-
+-- | Make a data vector from a window on some glyphs.
 mkSpacingVector :: Glyph g =>
                    [Maybe g]    -- ^ the glyphs in the moving window
                 -> V.Vector Double
@@ -190,7 +207,7 @@ mkSpacingVector (g1:g2:gs) = V.concat
 
 -- | Calculate the horizontal space in between two glyphs.
 spaceBetween :: (Glyph g) => g -> g -> Double
-spaceBetween g1 g2 = abs $ (xLeft g2) - (xRight g1)
+spaceBetween g1 g2 = abs $ (xLeft g2) - (xRight g1) -- FIXME?
 
 
 -- | Generate a shape of data for training or testing an ANN from a
@@ -257,10 +274,13 @@ mkTrainingShapes txtLine glyphs' =
 -- number of preceding and succeeding glyphs in 'mkTrainingShapes'.
 type SpacingShape = S ('D1 21)
 
+-- | The shape of data output from the ANN.
 type SpacingOutput = S ('D1 2)
 
-type SpacingRow = (SpacingShape, SpacingOutput) 
+-- | The shape of training data for the ANN.
+type SpacingRow = (SpacingShape, SpacingOutput)
 
+-- | The ANN for inserting inter-word spaces.
 type SpacingNet
   = Network
     '[ FullyConnected 21 92, Logit,
@@ -275,25 +295,12 @@ type SpacingNet
        'D1 2, 'D1 2]
 
 
+-- | A net with random weights.
 randomSpacingNet :: MonadRandom m => m SpacingNet
 randomSpacingNet = randomNetwork
 
 
-spaceLearningParams :: LearningParameters
-spaceLearningParams = LearningParameters 0.01 0.9 0.0005
-
-
--- trainSpacingRow :: LearningParameters -> SpacingNet -> SpacingRow -> SpacingNet
--- trainSpacingRow lp net (input, output) = train lp net input output
-
--- testSpacingRow :: SpacingNet -> SpacingRow -> (S ('D1 2), S ('D1 2))
--- testSpacingRow net (rowInput, wishedOutput) = (wishedOutput, runNet net rowInput)
-
--- getSpacingLabels :: (SpacingOutput, SpacingOutput) -> (Int, Int)
--- getSpacingLabels (S1D wishedLabel, S1D actualOutput) =
---   (maxIndex (extract wishedLabel), maxIndex (extract actualOutput))
-
-
+-- | Run a single iteration learning the network.
 runSpacingIteration
   :: Handle                     -- ^ a file handle for logging
   -> [SpacingRow]               -- ^ training data
@@ -313,18 +320,7 @@ runSpacingIteration log trainRows validateRows rate net i = do
     trainEach rate' !network (i, o) = train rate' network i o
 
 
-runSpacingNet :: SpacingNet -> Char -> SpacingShape -> LeftSpacing Char
-runSpacingNet net char input =
-  spaceFromLabel char $ runNet net input
-
-
-spaceFromLabel :: a -> SpacingOutput -> LeftSpacing a
-spaceFromLabel char (S1D label) = mkSpace char $ maxIndex $ SA.extract label
-  where
-    mkSpace char 0 = NoSpace char
-    mkSpace char 1 = SpaceAfter char
-
-
+-- | Run the trained network a line of 'Glyph's.
 runSpacingNetOnLine :: Glyph g => SpacingNet -> [g] -> Either String T.Text
 runSpacingNetOnLine network glyphs' =
   fmap (T.pack .
@@ -335,4 +331,22 @@ runSpacingNetOnLine network glyphs' =
   mkTrainingShapes glyphsTxt glyphs
   where
     glyphs = sortOn xLeft glyphs'
+     -- A Text is needed for reusing mkTrainingShapes, but thrown
+     -- away:
     glyphsTxt = T.concat $ mapMaybe text glyphs
+
+
+-- | Run the trained network on input data.
+runSpacingNet :: SpacingNet -> Char -> SpacingShape -> LeftSpacing Char
+runSpacingNet net char input =
+  spaceFromLabel char $ runNet net input
+
+
+-- | Evaluate the output from the network.
+spaceFromLabel :: a -> SpacingOutput -> LeftSpacing a
+spaceFromLabel char (S1D label) = mkSpace char $ maxIndex $ SA.extract label
+  where
+    mkSpace char 0 = NoSpace char
+    mkSpace char 1 = SpaceAfter char
+
+
