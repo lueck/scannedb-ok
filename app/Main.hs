@@ -50,6 +50,7 @@ data ExtractionCommand
   | TrainSpacing
   { inputMethod :: InputMethod
   , lineOpts :: LineOptions
+  , iterations :: Int
   , learningParameters :: LearningParameters
   , trainingPDF :: FilePath     -- ^ file with glyphs (PDF, XML etc.) for training
   , trainingTxt :: FilePath     -- ^ plaintext file with spaces for training
@@ -188,6 +189,10 @@ trainSpacing_ :: Parser ExtractionCommand
 trainSpacing_ = TrainSpacing
   <$> inputMethod_
   <*> lineOpts_
+  <*> option auto (long "iterations"
+                   <> help "number of learning iterations"
+                   <> value 100
+                   <> showDefault)
   <*> (LearningParameters
        <$> option auto (long "rate"
                         <> help "Learning rate"
@@ -195,7 +200,7 @@ trainSpacing_ = TrainSpacing
                         <> showDefault)
        <*> option auto (long "momentum"
                         <> help "Learning momentum"
-                        <> value 0.1
+                        <> value 0.9
                         <> showDefault)
        <*> option auto (long "l2"
                         <> help "Learning regulizer"
@@ -422,7 +427,7 @@ run (PdfToText _ outputMethod pages lineOpts spacing' lineCategorizer' nlp' inpu
         glyphs :: [[P.Glyph]] <- mapM (extractPdfPageGlyphs rootNode) pages
         extract outputMethod lineOpts spacing' (nlpOutput nlp' lineCategorizer') $ zip pages glyphs
         return ()
-run (TrainSpacing PdfMinerXml lineOpts rate trainingPdf trainingTxt validationPdf validationTxt) = do
+run (TrainSpacing PdfMinerXml lineOpts iterations rate trainingPdf trainingTxt validationPdf validationTxt) = do
   ranges <- parseRanges "*"
   spaced <- T.readFile trainingTxt
   glyphs <- B.readFile trainingPdf >>= parseXml ranges
@@ -435,14 +440,14 @@ run (TrainSpacing PdfMinerXml lineOpts rate trainingPdf trainingTxt validationPd
       validationTxtLines = cleanForSpaceTraining validationSpaced
       validationLinesByLines = zip validationTxtLines (concat validationGlyphLines)
   hPutStr stderr "Verifying training data..."
-  td <- mapM reportErrors $ map (uncurry mkTrainingShapes) linesByLines
+  td <- mapM reportErrors $ map (uncurry mkTrainingShapes22) linesByLines
   hPutStrLn stderr " done"
   hPutStr stderr "Verifying validation data..."
-  vd <- mapM reportErrors $ map (uncurry mkTrainingShapes) validationLinesByLines
+  vd <- mapM reportErrors $ map (uncurry mkTrainingShapes22) validationLinesByLines
   hPutStrLn stderr " done"
   hPutStr stderr "Training..."
   initialNet <- randomSpacingNet
-  trained <- foldM (runSpacingIteration stderr (concat td) (concat vd) rate) initialNet [1..100]
+  trained <- foldM (runSpacingIteration stderr (concat td) (concat vd) rate) initialNet [1..iterations]
   hPutStrLn stderr " done"
   hPutStrLn stderr "Trained network run on validation data:"
   -- print td
