@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveGeneric, GADTs #-}
 
 module Pdf.Extract.Glyph where
 
@@ -39,3 +39,38 @@ class Glyph a where
 --             (bbox a) == (bbox b) &&
 --             (code a) == (code b) &&
 --             (font a) == (font b))
+
+
+-- | A GADT that can be wrapped around data types that are instances
+-- of 'Glyph' (and 'Show'). This enables us to use a single function
+-- for getting glyphs from various input formats.
+data GlyphType
+  where
+    MkGlyphType :: (Glyph g, Show g, Eq g) => g -> GlyphType
+
+instance Show GlyphType where
+  show (MkGlyphType g) = show g
+
+instance Eq GlyphType where
+  (==) = eqGlyphType
+  (/=) = neGlyphType
+
+eqGlyphType, neGlyphType :: GlyphType -> GlyphType -> Bool
+eqGlyphType (MkGlyphType g1) (MkGlyphType g2) =
+  -- g1 == g2 -- does not work, since they may be of different types
+  (text g1 == text g1) &&
+  (bbox g1 == bbox g2) &&
+  (code g1 == code g2) &&
+  (font g1 == font g2)
+neGlyphType (MkGlyphType g1) (MkGlyphType g2) =
+  -- g1 /= g2
+  (text g1 /= text g1) &&
+  (bbox g1 /= bbox g2) &&
+  (code g1 /= code g2) &&
+  (font g1 /= font g2)
+
+instance Glyph GlyphType where
+  text (MkGlyphType g) = text g
+  bbox (MkGlyphType g) = bbox g
+  code (MkGlyphType g) = code g
+  font (MkGlyphType g) = font g

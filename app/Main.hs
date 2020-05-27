@@ -35,11 +35,43 @@ import Pdf.Extract.Syllable
 
 -- * Parsing command line arguments
 
--- | A record for command line arguments
+-- | A record for all subcommands and their arguments
 data ExtractionCommand
-  = PdfToText
+  = ExtractText
   { inputMethod :: InputMethod
-  , outputMethod :: OutputMethod
+  , pages :: String
+  , lineOpts :: LineOptions
+  , fixedSpacingFactor :: Double
+  , lineCategorizer :: LineCategorizer
+  , nlpOut :: Bool
+  , inputFile :: String
+  }
+  | NoSpaces
+  { inputMethod :: InputMethod
+  , pages :: String
+  , lineOpts :: LineOptions
+  , inputFile :: String
+  }
+  | Info
+  { inputMethod :: InputMethod
+  , pages :: String
+  , lineOpts :: LineOptions
+  , inputFile :: String
+  }
+  | ExtractGlyphs
+  { inputMethod :: InputMethod
+  , pages :: String
+  , lineOpts :: LineOptions
+  , inputFile :: String
+  }
+  | SpacingStats
+  { inputMethod :: InputMethod
+  , pages :: String
+  , lineOpts :: LineOptions
+  , inputFile :: String
+  }
+  | ExtractWords
+  { inputMethod :: InputMethod
   , pages :: String
   , lineOpts :: LineOptions
   , fixedSpacingFactor :: Double
@@ -57,10 +89,6 @@ data ExtractionCommand
   , validationPDF :: FilePath   -- ^ file with glyphs (PDF, XML, etc.) for validation
   , validationTxt :: FilePath   -- ^ plaintext file with spaces for validation
   }
-
--- | A record for the output command line argument 
-data OutputMethod = Text | NoSpaces | Info | Glyphs | Spacing' | Tokens
-
 
 -- | A record for the input type command line argument 
 data InputMethod = PdfInput | PdfMinerXml
@@ -97,32 +125,6 @@ inputMethod_ =
     <> long "xml"
     <> help "XML input data. An XML representation of the glyphs of a PDF file, like produced with PDFMiner's \"pdf2txt.py -t xml ...\" command."))
 
-outputMethod_ :: Parser OutputMethod
-outputMethod_ =
-  (flag Text Text
-   (short 't'
-    <> long "text"
-    <> help "Extract text. (Default)"))
-  <|>
-  (flag' NoSpaces
-   (long "no-spaces"
-    <> help "Extract text without spaces. (PDF really does not even know the concept of spaces!)"))
-  <|>
-  (flag' Info
-   (long "statistics"
-    <> help "Show statistics about the text."))
-  <|>
-  (flag' Spacing'
-   (long "spacing"
-    <> help "Extract inter-glyph distances for statistical analysis. This generates CSV output."))
-  <|>
-  (flag' Glyphs
-   (long "glyphs"
-    <> help "Show the information about the glyphs found in the document."))
-  <|>
-  (flag' Tokens
-   (long "tokens"
-    <> help "Generate a list of tokens from the document."))
 
 pages_ :: Parser String
 pages_ =
@@ -167,11 +169,10 @@ nlpOut_ = switch
    <> help "Convient toggle for NLP-friendly output when categorizing lines by-indent (see -i) and drop page signature, drop custos, no indentation of categorized lines. This sets PAR to newline \"\\n\" and BLOCKQUOTE to the empty string \"\".")
 
 
--- | A parser for the command line arguments.
-pdfToText_ :: Parser ExtractionCommand
-pdfToText_ = PdfToText
+-- | A parser for the __extract__ command and its arguments.
+extractText_ :: Parser ExtractionCommand
+extractText_ = ExtractText
   <$> inputMethod_
-  <*> outputMethod_
   <*> pages_
   <*> lineOpts_
   <*> option auto (short 'f'
@@ -184,6 +185,62 @@ pdfToText_ = PdfToText
   <*> nlpOut_
   <*> argument str (metavar "INFILE"
                     <> help "Path to the input file.")
+
+-- | A parser for the __info__ command and its arguments.
+info_ :: Parser ExtractionCommand
+info_ = Info
+  <$> inputMethod_
+  <*> pages_
+  <*> lineOpts_
+  <*> argument str (metavar "INFILE"
+                    <> help "Path to the input file.")
+
+-- | A parser for the __nospaces__ command and its arguments.
+noSpaces_ :: Parser ExtractionCommand
+noSpaces_ = NoSpaces
+  <$> inputMethod_
+  <*> pages_
+  <*> lineOpts_
+  <*> argument str (metavar "INFILE"
+                    <> help "Path to the input file.")
+
+-- | A parser for the __glyphs__ command and its arguments.
+glyphs_ :: Parser ExtractionCommand
+glyphs_ = ExtractGlyphs
+  <$> inputMethod_
+  <*> pages_
+  <*> lineOpts_
+  <*> argument str (metavar "INFILE"
+                    <> help "Path to the input file.")
+
+
+-- | A parser for the __glyphstats__ command and its arguments.
+spacingStats_ :: Parser ExtractionCommand
+spacingStats_ = SpacingStats
+  <$> inputMethod_
+  <*> pages_
+  <*> lineOpts_
+  <*> argument str (metavar "INFILE"
+                    <> help "Path to the input file.")
+
+
+-- | A parser for the __words__ command and its arguments.
+extractWords_ :: Parser ExtractionCommand
+extractWords_ = ExtractWords
+  <$> inputMethod_
+  <*> pages_
+  <*> lineOpts_
+  <*> option auto (short 'f'
+                   <> long "spacing-factor"
+                   <> help "A fixed spacing factor. If the distance between two glyphs exceeds the product of the first glyphs width and this factor, a space is inserted. For Gothic letter scanned by google values down to 1 are promising."
+                   <> value 1.3
+                   <> showDefault
+                   <> metavar "SPACING")
+  <*> lineCategorizer_
+  <*> nlpOut_
+  <*> argument str (metavar "INFILE"
+                    <> help "Path to the input file.")
+
 
 trainSpacing_ :: Parser ExtractionCommand
 trainSpacing_ = TrainSpacing
@@ -216,20 +273,65 @@ trainSpacing_ = TrainSpacing
                     <> help "Path to plaintext with correct spaces which corresponds exactly to VALIDATIONPDF.")
 
 
+formatHint :: String
+formatHint = "\n\nTake care of the parentheses, square brackets and pipes in the usage note. Parentheses group options together, the pipe divides (groups of options) into alternatives. Square brackets mean that the option is optional. "
+
+
 command_ :: Parser ExtractionCommand
 command_ = subparser
-  (command "extract"
+  (command "text"
    (info
-    (helper <*> pdfToText_)
+    (helper <*> extractText_)
     (fullDesc
-     <> progDesc "scannedb-ok extract   extracts the text from a PDF and was written to work for scanned books from books.google.com. There are options for stripping of page headers and footers in order to make the pure text ready for text mining and NLP.\n\nTake care of the parentheses, square brackets and pipes in the usage note. Parentheses group options together, the pipe divides (groups of options) into alternatives. Square brackets mean that the option is optional.\n\nThere are two input formats, pdf and xml. There are six output formats: --text which is the default, --no-spaces for scriptura continua, --statistics for information on each page, --spacing for csv output with information on glyphs an inter-glyph spacing, --glyphs for an internal representation of glyphs, --tokens for output of a list of words which can be reused for repairing syllable divisions. There are two modes of line detection: -i for categorization of lines into headline, footline etc., -C for no such categorization at all. These modes have various options.\n\nThe order of the command line arguments does not matter."
-     <> header "scannedb-ok extract - extract text from a PDF, even scanned books." ))
+     <> progDesc "scannedb-ok text   extracts the text from a PDF. There are options for stripping of page headers and footers in order to make the pure text ready for text mining and NLP.\n\nThere are two input formats, pdf and xml."
+     <> header "scannedb-ok text - extract text from a PDF." ))
+   --
+   <>
+   command "words"
+    (info
+     (helper <*> extractWords_)
+     (fullDesc
+      <> progDesc "scannedb-ok words  extracts a list of all non-divided words from the document. The first an the last word or word-part of a line is left from the list, since they may be parts of word due to syllable division."
+      <> header "scannedb-ok words - Generate a list of words from the document."))
+   --
    <> command "trainSpacing"
    (info
     (helper <*> trainSpacing_)
     (fullDesc
      <> progDesc "scannedb-ok trainSpacing   trains an ANN for inter-glyph spacing. This requires four input files: TRAININGPDF and TRAININGTXT must contain exactly the same text, once in PDF format (or some other format conaining glyph descriptions, like pdfminers xml), and once as plaintext with correct spaces. This pair of files is used for training the neurons. VALIDATIONPDF and VALIDATIONTXT have to be exactly corresponding texts, too. They are used to validate the trained network after each learning iteration and the validation result is logged, so that the progression can be observed. For a start, you can simply reuse the first pair of files as validation texts."
-     <> header "scannedb-ok trainSpacing - train spacing module.")))
+     <> header "scannedb-ok trainSpacing - Train spacing module."))   --
+   <>
+   command "nospaces"
+    (info
+     (helper <*> noSpaces_)
+     (fullDesc
+      <> progDesc "scannedb-ok nospaces  extracts the text from a PDF without inserting spaces, i.e. it produces scriptura continua."
+      <> header "scannedb-ok nospaces - extract text without spaces."))
+   --
+   <>
+   command "stats"
+    (info
+     (helper <*> info_)
+     (fullDesc
+      <> progDesc "scannedb-ok stats  shows statistics about the text."
+      <> header "scannedb-ok stats - Show statistics about the text."))
+   --
+   <>
+   command "spacing"
+    (info
+     (helper <*> spacingStats_)
+     (fullDesc
+      <> progDesc "scannedb-ok spacing  shows the inter-glyph distances for statistical analysis. This generates CSV output."
+      <> header "scannedb-ok spacing - Extract inter-glyph distances for statistical analysis."))
+   --
+   <>
+   command "glyphs"
+    (info
+     (helper <*> glyphs_)
+     (fullDesc
+      <> progDesc "scannedb-ok glyphs  shows information about the glyphs found in the document."
+      <> header "scannedb-ok glyphs - Show information about the glyphs found in the document."))
+  )
 
 
 lineOpts_ :: Parser LineOptions
@@ -395,27 +497,47 @@ main :: IO ()
 main = execParser opts >>= run
   where opts = info (helper <*> command_)
                (fullDesc
-                <> progDesc "scannedb-ok extracts the text from a PDF and was written to work for scanned books from books.google.com. "
-                <> header "scannedb-ok extracts text from a PDF, even scanned books.")
+                <> progDesc "scannedb-ok is a tool for extracting the text from a PDF and was written to work for scanned books from books.google.com. It was designed to always correctly extract the LINES of the text, to insert SPACES even in complicated cases like emphasis with spaced letters and to repair SYLLABLE DIVISION at line breaks. There are subcommands for extracting text, training an artificial neural network, printing statistics etc."
+                <> header "scannedb-ok -- A tool for extracting text from a PDF that even works for scanned books.")
 
 
--- | Run the extractor with the parsed command line arguments.
-run :: ExtractionCommand -> IO ()
-run (PdfToText PdfMinerXml outputMethod pages lineOpts spacing' lineCategorizer' nlp' inputFile) = do
+-- | Get glyphs from various input formats. Ther returned glyphs are
+-- packed in the 'MkGlyphType' GADT constructor, because Haskell does
+-- not allow to return a class.
+getGlyphs :: InputMethod        -- ^ type of input file
+          -> String             -- ^ range
+          -> FilePath           -- ^ path
+          -> IO [(Int, [GlyphType])]
+getGlyphs PdfMinerXml pages inputFile = do
+  pages <- getPdfMinerGlyphs pages inputFile
+  return $ map (\(p, gs) -> (p, (map MkGlyphType gs))) pages
+getGlyphs PdfInput pages inputFile = do
+  hPutStrLn stderr "PDF input does not work good at the moment, due to a third-party PDF-parsing library. Please, consider using the -x option!"
+  pages <- getPdfGlyphs pages inputFile
+  return $ map (\(p, gs) -> (p, (map MkGlyphType gs))) pages
+
+
+-- | Get pages of glyphs from PdfMiner XML input.
+getPdfMinerGlyphs :: String     -- ^ range
+             -> FilePath        -- ^ path
+             -> IO [(Int, [PdfMinerGlyph])]
+getPdfMinerGlyphs pages inputFile = do
   case (R.parseRanges pages)::(Either R.ParseError [R.Range Int]) of
     Left err -> do
-      print err
-      return ()
+      fail $ show err
     Right ranges -> do
       glyphs <- B.readFile inputFile >>= parseXml ranges
-      extract outputMethod lineOpts spacing' (nlpOutput nlp' lineCategorizer') $
-        zip [1..] glyphs
-      return ()
-run (PdfToText _ outputMethod pages lineOpts spacing' lineCategorizer' nlp' inputFile) = do
+      return $ zip [1..] glyphs
+
+-- | Get pages of glyphs from PDF input.
+getPdfGlyphs :: String             -- ^ range
+             -> FilePath           -- ^ path
+             -> IO [(Int, [P.Glyph])]
+getPdfGlyphs pages inputFile = do
+  hPutStrLn stderr "PDF input does not work good at the moment, due to a third-party PDF-parsing library. Please, consider using the -x option!"
   case (R.parseRanges pages)::(Either R.ParseError [R.Range Int]) of
     Left err -> do
-      print err
-      return ()
+      fail $ show err
     Right ranges -> do
       withBinaryFile inputFile ReadMode $ \handle -> do
         pdf <- P.pdfWithHandle handle
@@ -425,8 +547,68 @@ run (PdfToText _ outputMethod pages lineOpts spacing' lineCategorizer' nlp' inpu
         count <- P.pageNodeNKids rootNode
         let pages = map (\n -> n - 1) $ filter (R.inRanges ranges) [1 .. count]
         glyphs :: [[P.Glyph]] <- mapM (extractPdfPageGlyphs rootNode) pages
-        extract outputMethod lineOpts spacing' (nlpOutput nlp' lineCategorizer') $ zip pages glyphs
-        return ()
+        return $ zip pages glyphs
+
+
+-- | Run the extractor with the parsed command line arguments.
+run :: ExtractionCommand -> IO ()
+
+-- for performance reasons we do not use getGlyphs here
+run (ExtractText PdfInput ranges lineOpts spacing' lineCategorizer' nlp' inFile) = do
+  pages <- getPdfGlyphs ranges inFile
+  extractText lineOpts spacing' (nlpOutput nlp' lineCategorizer') pages
+run (ExtractText PdfMinerXml ranges lineOpts spacing' lineCategorizer' nlp' inFile) = do
+  pages <- getPdfMinerGlyphs ranges inFile
+  extractText lineOpts spacing' (nlpOutput nlp' lineCategorizer') pages
+
+run (ExtractWords PdfInput ranges lineOpts spacing' lineCategorizer' nlp' inFile) = do
+  pages <- getPdfGlyphs ranges inFile
+  extractWords lineOpts spacing' (nlpOutput nlp' lineCategorizer') pages
+run (ExtractWords PdfMinerXml ranges lineOpts spacing' lineCategorizer' nlp' inFile) = do
+  pages <- getPdfMinerGlyphs ranges inFile
+  extractWords lineOpts spacing' (nlpOutput nlp' lineCategorizer') pages
+
+run (NoSpaces inMeth ranges lineOpts inFile) = do
+  pages <- getGlyphs inMeth ranges inFile
+  forM_ pages (\(page, glyphs) -> do
+                  let lines = findLinesWindow lineOpts glyphs
+                  mapM_ (T.putStrLn . (linearizeLine (T.concat . mapMaybe text))) lines)
+
+run (Info inMeth ranges lineOpts inFile) = do
+  pages <- getGlyphs inMeth ranges inFile
+  forM_ pages (\(page, glyphs) -> do
+                  putStr "Page: "
+                  print $ show page
+                  putStr "#Glyphs: "
+                  print $ length glyphs
+                  putStr "Top: "
+                  print $ glyphsTop glyphs
+                  putStr "Bottom: "
+                  print $ glyphsBottom glyphs
+                  let lines = findLinesWindow lineOpts glyphs
+                  printLineInfo $ genLineInfo lines)
+
+run (ExtractGlyphs inMeth ranges lineOpts inFile) = do
+  pages <- getGlyphs inMeth ranges inFile
+  mapM_ (putStrLn . show) $ concatMap snd pages
+
+run (SpacingStats inMeth ranges lineOpts inFile) = do
+  pages <- getGlyphs inMeth ranges inFile
+  forM_ pages (\(page, glyphs) -> do
+                  let lines = findLinesWindow lineOpts glyphs
+                      lines_ = zip3 (map Just [1..])
+                               (repeat (Just page))
+                               $ map (sortOn xLeft) lines
+                      csvOpts = Csv.defaultEncodeOptions {
+                        Csv.encDelimiter = fromIntegral $ ord ','
+                        }
+                  mapM (C.putStr .
+                         (Csv.encodeWith csvOpts) .
+                         (uncurry3 spacingsInLine)) lines_)
+  where
+    getGlyph :: Glyph g => (a, b, [g]) -> [g]
+    getGlyph (_, _, g) = g
+
 run (TrainSpacing PdfMinerXml lineOpts iterations rate trainingPdf trainingTxt validationPdf validationTxt) = do
   ranges <- parseRanges "*"
   spaced <- T.readFile trainingTxt
@@ -455,6 +637,9 @@ run (TrainSpacing PdfMinerXml lineOpts iterations rate trainingPdf trainingTxt v
             l <- reportErrors $ runSpacingNetOnLine trained gs
             T.putStrLn l) (concat validationGlyphLines)
 
+run _ = do
+  fail "This command is not defined for this input type."
+
 
 reportErrors :: Either String a -> IO a
 reportErrors (Right r) = return r
@@ -469,7 +654,6 @@ parseRanges pages = do
     Right ranges -> return ranges
 
 
-
 -- | get all the glyphs from a page using the pdf-toolbox
 extractPdfPageGlyphs :: P.PageNode -> Int -> IO ([P.Glyph])
 extractPdfPageGlyphs  rootNode n = do
@@ -478,55 +662,21 @@ extractPdfPageGlyphs  rootNode n = do
   return $ concatMap P.spGlyphs spans
 
 
-extract :: (Show g, Eq g, Glyph g) =>
-  OutputMethod ->               -- ^ output method
+extractWords :: (Show g, Eq g, Glyph g) =>
   LineOptions ->                -- ^ count of lines etc.
   Double ->                     -- ^ spacing factor
   LineCategorizer ->            -- ^ config of line categorizer
   [(Int, [g])] ->               -- ^ list of tuples of page number and
                                 -- glyphs on this page
   IO ()
-extract Glyphs _ _ _ pages = do
-  mapM_ (putStrLn . show) $ concatMap snd pages
-extract Info lineOpts _ _ pages = do
-  forM_ pages (\(page, glyphs) -> do
-                  putStr "Page: "
-                  print $ show page
-                  putStr "#Glyphs: "
-                  print $ length glyphs
-                  putStr "Top: "
-                  print $ glyphsTop glyphs
-                  putStr "Bottom: "
-                  print $ glyphsBottom glyphs
-                  let lines = findLinesWindow lineOpts glyphs
-                  printLineInfo $ genLineInfo lines)
-extract NoSpaces lineOpts _ _ pages = do
-  forM_ pages (\(page, glyphs) -> do
-                  let lines = findLinesWindow lineOpts glyphs
-                  mapM_ (T.putStrLn . (linearizeLine (T.concat . mapMaybe text))) lines)
-extract Spacing' lineOpts _ _ pages = do
-  forM_ pages (\(page, glyphs) -> do
-                  let lines = findLinesWindow lineOpts glyphs
-                      lines_ = zip3 (map Just [1..])
-                               (repeat (Just page))
-                               $ map (sortOn xLeft) lines
-                      csvOpts = Csv.defaultEncodeOptions {
-                        Csv.encDelimiter = fromIntegral $ ord ','
-                        }
-                  mapM (C.putStr .
-                         (Csv.encodeWith csvOpts) .
-                         (uncurry3 spacingsInLine)) lines_)
-  where
-    getGlyph :: Glyph g => (a, b, [g]) -> [g]
-    getGlyph (_, _, g) = g
-extract Tokens lineOpts spacing' (ByIndent byIndOpts linOpts sylOpts) pages = do
+extractWords lineOpts spacing' (ByIndent byIndOpts linOpts sylOpts) pages = do
   forM_ pages (\(page, glyphs) -> do
                   let tokens = concatMap (tokenizeMiddle) $
                                map (linearizeCategorizedLine linOpts (spacingFactor spacing')) $
                                categorizeLines (byIndent byIndOpts) $
                                findLinesWindow lineOpts glyphs
                   mapM T.putStrLn tokens)
-extract Tokens lineOpts spacing' (AsDefault headlines' footlines') pages = do
+extractWords lineOpts spacing' (AsDefault headlines' footlines') pages = do
   forM_ pages (\(page, glyphs) -> do
                   let tokens = concatMap (tokenizeMiddle) $
                                map (linearizeLine (spacingFactor spacing')) $
@@ -534,7 +684,16 @@ extract Tokens lineOpts spacing' (AsDefault headlines' footlines') pages = do
                                dropFoot footlines' $
                                findLinesWindow lineOpts glyphs
                   mapM T.putStrLn tokens)
-extract _ lineOpts spacing' (ByIndent byIndOpts linOpts sylOpts) pages = do
+
+
+extractText :: (Show g, Eq g, Glyph g) =>
+  LineOptions ->                -- ^ count of lines etc.
+  Double ->                     -- ^ spacing factor
+  LineCategorizer ->            -- ^ config of line categorizer
+  [(Int, [g])] ->               -- ^ list of tuples of page number and
+                                -- glyphs on this page
+  IO ()
+extractText lineOpts spacing' (ByIndent byIndOpts linOpts sylOpts) pages = do
   forM_ pages (\(page, glyphs) -> do
                   let lines = map (linearizeCategorizedLine linOpts (spacingFactor spacing')) $
                               categorizeLines (byIndent byIndOpts) $
@@ -547,7 +706,7 @@ extract _ lineOpts spacing' (ByIndent byIndOpts linOpts sylOpts) pages = do
                   mapM T.putStr linearized
                   -- add form feed at end of page
                   T.putStr(T.singleton $ chr 12))
-extract _ lineOpts spacing' (AsDefault headlines' footlines') pages = do
+extractText lineOpts spacing' (AsDefault headlines' footlines') pages = do
   forM_ pages (\(page, glyphs) -> do
                   let lines = findLinesWindow lineOpts glyphs
                   mapM (T.putStrLn . (linearizeLine (spacingFactor spacing'))) $
