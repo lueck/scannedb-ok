@@ -20,6 +20,8 @@
 # resolver: https://example.com/snapshots/2018-01-01.yaml
 #resolver: lts-13.9
 resolver: lts-12.26
+#resolver: lts-15.5
+#resolver: lts-10.10
 
 # User packages to be built.
 # Various formats can be used as shown in the example below.
@@ -42,13 +44,18 @@ packages:
 # (e.g., acme-missiles-0.3)
 # extra-deps: []
 extra-deps:
+- range-0.2.1.1
+
 - github: Yuras/pdf-toolbox
   commit: 900e607c9407f0e0a8c5590953fc2667b2926bfd
   subdirs:
       - core
       - content
       - document
-- range-0.2.1.1
+
+- github: HuwCampbell/grenade
+  commit: 5206c95c423d9755e620f41576470a281ba59c89
+
 
 # Override default flag values for local packages and extra-deps
 # flags: {}
