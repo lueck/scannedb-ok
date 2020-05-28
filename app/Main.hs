@@ -23,6 +23,7 @@ import Data.Tuple.Extra
 import qualified Data.HashMap.Lazy as M
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 import Grenade
+import Data.Serialize
 
 import Pdf.Extract.Lines
 import Pdf.Extract.Linearize
@@ -41,7 +42,7 @@ data ExtractionCommand
   { inputMethod :: InputMethod
   , pages :: String
   , lineOpts :: LineOptions
-  , fixedSpacingFactor :: Double
+  , spaceMethod :: SpaceInsertion
   , lineCategorizer :: LineCategorizer
   , nlpOut :: Bool
   , inputFile :: String
@@ -74,7 +75,7 @@ data ExtractionCommand
   { inputMethod :: InputMethod
   , pages :: String
   , lineOpts :: LineOptions
-  , fixedSpacingFactor :: Double
+  , spaceMethod :: SpaceInsertion
   , lineCategorizer :: LineCategorizer
   , nlpOut :: Bool
   , inputFile :: String
@@ -88,11 +89,16 @@ data ExtractionCommand
   , trainingTxt :: FilePath     -- ^ plaintext file with spaces for training
   , validationPDF :: FilePath   -- ^ file with glyphs (PDF, XML, etc.) for validation
   , validationTxt :: FilePath   -- ^ plaintext file with spaces for validation
+  , netFile :: FilePath         -- ^ file to dump the trained network in
   }
 
 -- | A record for the input type command line argument 
 data InputMethod = PdfInput | PdfMinerXml
 
+-- | A record for the mechanism for inserting spaces
+data SpaceInsertion
+  = FixedSpacingFactor Double
+  | ANNSpacing FilePath
 
 -- | A record for the command line arguments on categorizing lines
 data LineCategorizer
@@ -124,6 +130,23 @@ inputMethod_ =
    (short 'x'
     <> long "xml"
     <> help "XML input data. An XML representation of the glyphs of a PDF file, like produced with PDFMiner's \"pdf2txt.py -t xml ...\" command."))
+
+
+spaceInsertion_ :: Parser SpaceInsertion
+spaceInsertion_ =
+  (FixedSpacingFactor
+   <$> option auto (short 'f'
+                    <> long "spacing-factor"
+                    <> help "Use a fixed-spacing-factor rule for inserting inter-word spaces. If the distance between two glyphs exceeds the product of the first glyphs width and this factor, a space is inserted. For Gothic letter scanned by google values down to 1 are promising."
+                    <> value 1.3
+                    <> showDefault
+                    <> metavar "SPACING"))
+  <|>
+  (ANNSpacing
+   <$> strOption (short 'n'
+                  <> long "spacing-net"
+                  <> help "Use a trained artificial neural network for inserting inter-word spaces."
+                  <> metavar "NETFILE"))
 
 
 pages_ :: Parser String
@@ -175,12 +198,7 @@ extractText_ = ExtractText
   <$> inputMethod_
   <*> pages_
   <*> lineOpts_
-  <*> option auto (short 'f'
-                   <> long "spacing-factor"
-                   <> help "A fixed spacing factor. If the distance between two glyphs exceeds the product of the first glyphs width and this factor, a space is inserted. For Gothic letter scanned by google values down to 1 are promising."
-                   <> value 1.3
-                   <> showDefault
-                   <> metavar "SPACING")
+  <*> spaceInsertion_
   <*> lineCategorizer_
   <*> nlpOut_
   <*> argument str (metavar "INFILE"
@@ -230,12 +248,7 @@ extractWords_ = ExtractWords
   <$> inputMethod_
   <*> pages_
   <*> lineOpts_
-  <*> option auto (short 'f'
-                   <> long "spacing-factor"
-                   <> help "A fixed spacing factor. If the distance between two glyphs exceeds the product of the first glyphs width and this factor, a space is inserted. For Gothic letter scanned by google values down to 1 are promising."
-                   <> value 1.3
-                   <> showDefault
-                   <> metavar "SPACING")
+  <*> spaceInsertion_
   <*> lineCategorizer_
   <*> nlpOut_
   <*> argument str (metavar "INFILE"
@@ -271,6 +284,8 @@ trainSpacing_ = TrainSpacing
                     <> help "Path to PDF (or XML) with validation text.")
   <*> argument str (metavar "VALIDATIONTEXT"
                     <> help "Path to plaintext with correct spaces which corresponds exactly to VALIDATIONPDF.")
+  <*> argument str (metavar "NETFILE"
+                    <> help "Path to the file where to dump the trained network in. The file will be in a binary format, so \".dat\" is a reasonable suffix.")
 
 
 formatHint :: String
@@ -561,6 +576,19 @@ parseRanges pages = do
     Right ranges -> return ranges
 
 
+-- * Get the space insertion mechanism
+
+-- | This returns a function for inserting inter-word spaces.
+getSpaceInserter :: Glyph g => SpaceInsertion -> IO ([g] -> T.Text)
+getSpaceInserter (FixedSpacingFactor fac) = do
+  return (spacingFactor fac)
+getSpaceInserter (ANNSpacing netFile) = do
+  c <- B.readFile netFile
+  trained :: SpacingNet <- reportErrors $ runGet get c
+  hPutStrLn stderr ("Parsed ANN: " ++ (filter (/='\n') $ show trained))
+  let fun = (either (T.pack . (++"ERROR: ")) id) . (runSpacingNetOnLine trained)
+  return fun
+
 
 -- * Run the program
 
@@ -576,16 +604,19 @@ main = execParser opts >>= run
 run :: ExtractionCommand -> IO ()
 
 -- for performance reasons we do not use getGlyphs here
-run (ExtractText PdfInput ranges lineOpts spacing' lineCategorizer' nlp' inFile) = do
+run (ExtractText PdfInput ranges lineOpts spacing lineCategorizer' nlp' inFile) = do
   pages <- getPdfGlyphs ranges inFile
-  extractText lineOpts spacing' (nlpOutput nlp' lineCategorizer') pages
-run (ExtractText PdfMinerXml ranges lineOpts spacing' lineCategorizer' nlp' inFile) = do
+  spaceFun <- getSpaceInserter spacing
+  extractText lineOpts spaceFun (nlpOutput nlp' lineCategorizer') pages
+run (ExtractText PdfMinerXml ranges lineOpts spacing lineCategorizer' nlp' inFile) = do
   pages <- getPdfMinerGlyphs ranges inFile
-  extractText lineOpts spacing' (nlpOutput nlp' lineCategorizer') pages
+  spaceFun <- getSpaceInserter spacing
+  extractText lineOpts spaceFun (nlpOutput nlp' lineCategorizer') pages
 
-run (ExtractWords inMeth ranges lineOpts spacing' lineCategorizer' nlp' inFile) = do
+run (ExtractWords inMeth ranges lineOpts spacing lineCategorizer' nlp' inFile) = do
   pages <- getGlyphs inMeth ranges inFile
-  extractWords lineOpts spacing' (nlpOutput nlp' lineCategorizer') pages
+  spaceFun <- getSpaceInserter spacing
+  extractWords lineOpts spaceFun (nlpOutput nlp' lineCategorizer') pages
 
 run (NoSpaces inMeth ranges lineOpts inFile) = do
   pages <- getGlyphs inMeth ranges inFile
@@ -628,7 +659,7 @@ run (SpacingStats inMeth ranges lineOpts inFile) = do
     getGlyph :: Glyph g => (a, b, [g]) -> [g]
     getGlyph (_, _, g) = g
 
-run (TrainSpacing PdfMinerXml lineOpts iterations rate trainingPdf trainingTxt validationPdf validationTxt) = do
+run (TrainSpacing PdfMinerXml lineOpts iterations rate trainingPdf trainingTxt validationPdf validationTxt netFile) = do
   ranges <- parseRanges "*"
   spaced <- T.readFile trainingTxt
   glyphs <- B.readFile trainingPdf >>= parseXml ranges
@@ -646,9 +677,12 @@ run (TrainSpacing PdfMinerXml lineOpts iterations rate trainingPdf trainingTxt v
   hPutStr stderr "Verifying validation data..."
   vd <- mapM reportErrors $ map (uncurry mkTrainingShapes22) validationLinesByLines
   hPutStrLn stderr " done"
-  hPutStr stderr "Training..."
+  hPutStrLn stderr "Training..."
   initialNet <- randomSpacingNet
   trained <- foldM (runSpacingIteration stderr (concat td) (concat vd) rate) initialNet [1..iterations]
+  hPutStrLn stderr " done"
+  hPutStr stderr $ "Dumping trained network to " ++ netFile
+  B.writeFile netFile $ runPut $ put trained
   hPutStrLn stderr " done"
   hPutStrLn stderr "Trained network run on validation data:"
   -- print td
@@ -671,22 +705,22 @@ reportErrors (Left err) = fail err
 
 extractWords :: (Show g, Eq g, Glyph g) =>
   LineOptions ->                -- ^ count of lines etc.
-  Double ->                     -- ^ spacing factor
+  ([g] -> T.Text) ->            -- ^ space insertion function
   LineCategorizer ->            -- ^ config of line categorizer
   [(Int, [g])] ->               -- ^ list of tuples of page number and
                                 -- glyphs on this page
   IO ()
-extractWords lineOpts spacing' (ByIndent byIndOpts linOpts sylOpts) pages = do
+extractWords lineOpts spaceFun (ByIndent byIndOpts linOpts sylOpts) pages = do
   forM_ pages (\(page, glyphs) -> do
                   let tokens = concatMap (tokenizeMiddle) $
-                               map (linearizeCategorizedLine linOpts (spacingFactor spacing')) $
+                               map (linearizeCategorizedLine linOpts spaceFun) $
                                categorizeLines (byIndent byIndOpts) $
                                findLinesWindow lineOpts glyphs
                   mapM T.putStrLn tokens)
-extractWords lineOpts spacing' (AsDefault headlines' footlines') pages = do
+extractWords lineOpts spaceFun (AsDefault headlines' footlines') pages = do
   forM_ pages (\(page, glyphs) -> do
                   let tokens = concatMap (tokenizeMiddle) $
-                               map (linearizeLine (spacingFactor spacing')) $
+                               map (linearizeLine spaceFun) $
                                drop headlines' $
                                dropFoot footlines' $
                                findLinesWindow lineOpts glyphs
@@ -695,14 +729,14 @@ extractWords lineOpts spacing' (AsDefault headlines' footlines') pages = do
 
 extractText :: (Show g, Eq g, Glyph g) =>
   LineOptions ->                -- ^ count of lines etc.
-  Double ->                     -- ^ spacing factor
+  ([g] -> T.Text) ->            -- ^ spacing factor
   LineCategorizer ->            -- ^ config of line categorizer
   [(Int, [g])] ->               -- ^ list of tuples of page number and
                                 -- glyphs on this page
   IO ()
-extractText lineOpts spacing' (ByIndent byIndOpts linOpts sylOpts) pages = do
+extractText lineOpts spaceFun (ByIndent byIndOpts linOpts sylOpts) pages = do
   forM_ pages (\(page, glyphs) -> do
-                  let lines = map (linearizeCategorizedLine linOpts (spacingFactor spacing')) $
+                  let lines = map (linearizeCategorizedLine linOpts spaceFun) $
                               categorizeLines (byIndent byIndOpts) $
                               findLinesWindow lineOpts glyphs
                   linearized <- if (isJust $ tokensFile sylOpts)
@@ -713,10 +747,10 @@ extractText lineOpts spacing' (ByIndent byIndOpts linOpts sylOpts) pages = do
                   mapM T.putStr linearized
                   -- add form feed at end of page
                   T.putStr(T.singleton $ chr 12))
-extractText lineOpts spacing' (AsDefault headlines' footlines') pages = do
+extractText lineOpts spaceFun (AsDefault headlines' footlines') pages = do
   forM_ pages (\(page, glyphs) -> do
                   let lines = findLinesWindow lineOpts glyphs
-                  mapM (T.putStrLn . (linearizeLine (spacingFactor spacing'))) $
+                  mapM (T.putStrLn . (linearizeLine spaceFun)) $
                     (drop headlines') $ dropFoot footlines' lines
                   T.putStr(T.singleton $ chr 12) -- add form feed at end of page
                   return ())

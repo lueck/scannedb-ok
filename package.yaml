@@ -57,6 +57,7 @@ executables:
     - optparse-applicative
     - extra
     - ansi-wl-pprint
+    - cereal
 
 tests:
   scannedb-ok-test:

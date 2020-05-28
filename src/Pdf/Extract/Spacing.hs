@@ -137,6 +137,7 @@ singleGlyphSpacingVector g =
   , charFeature (fromEnum . isUpper) g
   , charFeature (fromEnum . isLower) g
   , charFeature (fromEnum . (`elem` (",;:.!?"::[Char]))) g
+  -- FIXME: make fit for french punctuation
   ]
   where
     charFeature f = fromIntegral . (fromMaybe 0 . (fmap (f . T.head))) . text

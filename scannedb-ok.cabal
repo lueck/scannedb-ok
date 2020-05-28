@@ -4,7 +4,7 @@ cabal-version: 2.2
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: df9546b976e43732ef985d5c10bb13bb4b5cf07913f30f8aed12b6296fbd3462
+-- hash: a5b840b4ed7188d757c533230b7ed1bb1f752598d1bbba500ee9779527ed484b
 
 name:           scannedb-ok
 version:        0.0.1.0
@@ -73,6 +73,7 @@ executable scannedb-ok
     , base >=4.7 && <5
     , bytestring
     , cassava
+    , cereal
     , extra
     , grenade
     , hmatrix >=0.18 && <0.21
