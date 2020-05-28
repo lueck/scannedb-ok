@@ -472,7 +472,7 @@ syllableRepair_ = SylRepair
   <$> optional (strOption
   (short 'w'
    <> long "word-pool"
-   <> help "If a path to file with a pool of words (tokens) is given, syllable division is repaired in the text output, but only when line categorization is turned on."
+   <> help "If a path to file with a pool of words (tokens) is given, syllable division is repaired in the text output, but only when line categorization is turned on. The \"words\" command may be used to generate word pools."
    <> metavar "WORDPOOL"))
   <*> switch
   (short 'D'
@@ -493,17 +493,18 @@ nlpOutput True (ByIndent byIndOpts linOpts sylOpts) =
 nlpOutput True o = o
 
 
-main :: IO ()
-main = execParser opts >>= run
-  where opts = info (helper <*> command_)
-               (fullDesc
-                <> progDesc "scannedb-ok is a tool for extracting the text from a PDF and was written to work for scanned books from books.google.com. It was designed to always correctly extract the LINES of the text, to insert SPACES even in complicated cases like emphasis with spaced letters and to repair SYLLABLE DIVISION at line breaks. There are subcommands for extracting text, training an artificial neural network, printing statistics etc."
-                <> header "scannedb-ok -- A tool for extracting text from a PDF that even works for scanned books.")
+-- * Read PDF or XML input
 
-
--- | Get glyphs from various input formats. Ther returned glyphs are
--- packed in the 'MkGlyphType' GADT constructor, because Haskell does
--- not allow to return a class.
+-- | Get glyphs from various input formats. The returned glyphs are
+-- wrapped in the 'MkGlyphType' GADT constructor, because Haskell does
+-- not allow to return a class. So the actual type of the parsed
+-- glyphs is completely unaccessible, but the API defined for 'Glyph'
+-- and 'Show' and 'Eq' is, because 'GlyphType' is an instance of these
+-- classes. See 'GlyphType'.
+--
+-- Return type: A list of tuples, the first component of which is an
+-- integer representing the page number and the second the list of
+-- glyphs on that page.
 getGlyphs :: InputMethod        -- ^ type of input file
           -> String             -- ^ range
           -> FilePath           -- ^ path
@@ -512,7 +513,6 @@ getGlyphs PdfMinerXml pages inputFile = do
   pages <- getPdfMinerGlyphs pages inputFile
   return $ map (\(p, gs) -> (p, (map MkGlyphType gs))) pages
 getGlyphs PdfInput pages inputFile = do
-  hPutStrLn stderr "PDF input does not work good at the moment, due to a third-party PDF-parsing library. Please, consider using the -x option!"
   pages <- getPdfGlyphs pages inputFile
   return $ map (\(p, gs) -> (p, (map MkGlyphType gs))) pages
 
@@ -522,12 +522,10 @@ getPdfMinerGlyphs :: String     -- ^ range
              -> FilePath        -- ^ path
              -> IO [(Int, [PdfMinerGlyph])]
 getPdfMinerGlyphs pages inputFile = do
-  case (R.parseRanges pages)::(Either R.ParseError [R.Range Int]) of
-    Left err -> do
-      fail $ show err
-    Right ranges -> do
-      glyphs <- B.readFile inputFile >>= parseXml ranges
-      return $ zip [1..] glyphs
+  ranges <- parseRanges pages
+  glyphs <- B.readFile inputFile >>= parseXml ranges
+  return $ zip [1..] glyphs -- FIXME: zip with ranges
+
 
 -- | Get pages of glyphs from PDF input.
 getPdfGlyphs :: String             -- ^ range
@@ -535,19 +533,43 @@ getPdfGlyphs :: String             -- ^ range
              -> IO [(Int, [P.Glyph])]
 getPdfGlyphs pages inputFile = do
   hPutStrLn stderr "PDF input does not work good at the moment, due to a third-party PDF-parsing library. Please, consider using the -x option!"
+  ranges <- parseRanges pages
+  withBinaryFile inputFile ReadMode $ \handle -> do
+    pdf <- P.pdfWithHandle handle
+    doc <- P.document pdf
+    catalog <- P.documentCatalog doc
+    rootNode <- P.catalogPageNode catalog
+    count <- P.pageNodeNKids rootNode
+    let pages = map (\n -> n - 1) $ filter (R.inRanges ranges) [1 .. count]
+    glyphs :: [[P.Glyph]] <- mapM (extractPdfPageGlyphs rootNode) pages
+    return $ zip pages glyphs
+
+-- | get all the glyphs from a page using the pdf-toolbox
+extractPdfPageGlyphs :: P.PageNode -> Int -> IO ([P.Glyph])
+extractPdfPageGlyphs  rootNode n = do
+  page <- P.pageNodePageByNum rootNode n
+  spans <- P.pageExtractGlyphs page
+  return $ concatMap P.spGlyphs spans
+
+
+-- | Make integer ranges from the \"pages\" argument.
+parseRanges :: String -> IO [R.Range Int]
+parseRanges pages = do
   case (R.parseRanges pages)::(Either R.ParseError [R.Range Int]) of
     Left err -> do
       fail $ show err
-    Right ranges -> do
-      withBinaryFile inputFile ReadMode $ \handle -> do
-        pdf <- P.pdfWithHandle handle
-        doc <- P.document pdf
-        catalog <- P.documentCatalog doc
-        rootNode <- P.catalogPageNode catalog
-        count <- P.pageNodeNKids rootNode
-        let pages = map (\n -> n - 1) $ filter (R.inRanges ranges) [1 .. count]
-        glyphs :: [[P.Glyph]] <- mapM (extractPdfPageGlyphs rootNode) pages
-        return $ zip pages glyphs
+    Right ranges -> return ranges
+
+
+
+-- * Run the program
+
+main :: IO ()
+main = execParser opts >>= run
+  where opts = info (helper <*> command_)
+               (fullDesc
+                <> progDesc "scannedb-ok is a tool for extracting the text from a PDF and was written to work for scanned books from books.google.com. It was designed to always correctly extract the LINES of the text, to insert SPACES even in complicated cases like emphasis with spaced letters and to repair SYLLABLE DIVISION at line breaks. There are commands for extracting text, training an artificial neural network, printing statistics etc. Type \"scannedb-ok COMMAND -h\" for information about a command."
+                <> header "scannedb-ok -- A tool for extracting text from a PDF that even works for scanned books.")
 
 
 -- | Run the extractor with the parsed command line arguments.
@@ -561,11 +583,8 @@ run (ExtractText PdfMinerXml ranges lineOpts spacing' lineCategorizer' nlp' inFi
   pages <- getPdfMinerGlyphs ranges inFile
   extractText lineOpts spacing' (nlpOutput nlp' lineCategorizer') pages
 
-run (ExtractWords PdfInput ranges lineOpts spacing' lineCategorizer' nlp' inFile) = do
-  pages <- getPdfGlyphs ranges inFile
-  extractWords lineOpts spacing' (nlpOutput nlp' lineCategorizer') pages
-run (ExtractWords PdfMinerXml ranges lineOpts spacing' lineCategorizer' nlp' inFile) = do
-  pages <- getPdfMinerGlyphs ranges inFile
+run (ExtractWords inMeth ranges lineOpts spacing' lineCategorizer' nlp' inFile) = do
+  pages <- getGlyphs inMeth ranges inFile
   extractWords lineOpts spacing' (nlpOutput nlp' lineCategorizer') pages
 
 run (NoSpaces inMeth ranges lineOpts inFile) = do
@@ -641,25 +660,13 @@ run _ = do
   fail "This command is not defined for this input type."
 
 
+-- | Report the error for an 'Either' functor.
 reportErrors :: Either String a -> IO a
 reportErrors (Right r) = return r
 reportErrors (Left err) = fail err
 
 
-parseRanges :: String -> IO [R.Range Int]
-parseRanges pages = do
-  case (R.parseRanges pages)::(Either R.ParseError [R.Range Int]) of
-    Left err -> do
-      fail $ show err
-    Right ranges -> return ranges
 
-
--- | get all the glyphs from a page using the pdf-toolbox
-extractPdfPageGlyphs :: P.PageNode -> Int -> IO ([P.Glyph])
-extractPdfPageGlyphs  rootNode n = do
-  page <- P.pageNodePageByNum rootNode n
-  spans <- P.pageExtractGlyphs page
-  return $ concatMap P.spGlyphs spans
 
 
 extractWords :: (Show g, Eq g, Glyph g) =>
