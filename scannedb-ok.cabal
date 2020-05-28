@@ -4,10 +4,10 @@ cabal-version: 2.2
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: a5b840b4ed7188d757c533230b7ed1bb1f752598d1bbba500ee9779527ed484b
+-- hash: e57329ef3aeb20555a75c583f25067f21cc61aad3fe1977ac55fcaba5bbc5cf6
 
 name:           scannedb-ok
-version:        0.0.1.0
+version:        0.0.2.0
 synopsis:       Text extraction from PDF, specially from scanned books
 description:    Please see the README on GitHub at <https://github.com/lueck/scannedb-ok#readme>
 homepage:       https://github.com/lueck/scannedb-ok#readme

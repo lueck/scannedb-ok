@@ -597,7 +597,8 @@ main = execParser opts >>= run
   where opts = info (helper <*> command_)
                (fullDesc
                 <> progDesc "scannedb-ok is a tool for extracting the text from a PDF and was written to work for scanned books from books.google.com. It was designed to always correctly extract the LINES of the text, to insert SPACES even in complicated cases like emphasis with spaced letters and to repair SYLLABLE DIVISION at line breaks. There are commands for extracting text, training an artificial neural network, printing statistics etc. Type \"scannedb-ok COMMAND -h\" for information about a command."
-                <> header "scannedb-ok -- A tool for extracting text from a PDF that even works for scanned books.")
+                <> header "scannedb-ok -- A tool for extracting text from a PDF that even works for scanned books."
+                <> footer "See also: https://github.com/lueck/scannedb-ok#readme")
 
 
 -- | Run the extractor with the parsed command line arguments.

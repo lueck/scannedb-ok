@@ -1,0 +1,55 @@
+scannedb-ok trainSpacing - Train spacing module.
+
+Usage: scannedb-ok trainSpacing ([-p|--pdf] | [-x|--xml])
+                                [-l|--lines-per-page LINES]
+                                [--threshold THRESHOLD]
+                                [-k|--keep-single-glyphs-lines]
+                                [--steps-per-line STEPS] [--iterations ARG]
+                                [--rate ARG] [--momentum ARG] [--l2 ARG]
+                                TRAININGPDF TRAININGTEXT VALIDATIONPDF
+                                VALIDATIONTEXT NETFILE
+  scannedb-ok trainSpacing trains an ANN for inter-glyph spacing. This requires
+  four input files: TRAININGPDF and TRAININGTXT must contain exactly the same
+  text, once in PDF format (or some other format conaining glyph descriptions,
+  like pdfminers xml), and once as plaintext with correct spaces. This pair of
+  files is used for training the neurons. VALIDATIONPDF and VALIDATIONTXT have
+  to be exactly corresponding texts, too. They are used to validate the trained
+  network after each learning iteration and the validation result is logged, so
+  that the progression can be observed. For a start, you can simply reuse the
+  first pair of files as validation texts.
+
+Available options:
+  -h,--help                Show this help text
+  -p,--pdf                 PDF input data. (Default)
+  -x,--xml                 XML input data. An XML representation of the glyphs
+                           of a PDF file, like produced with PDFMiner's
+                           "pdf2txt.py -t xml ..." command.
+  -l,--lines-per-page LINES
+                           Lines per page. Lines of a vertically filled page.
+                           This does not need to be exact. (default: 42)
+  --threshold THRESHOLD    A threshold value important for the identification of
+                           lines by the internal clustering algorithm:
+                           Fail-OCRed glyphs between the lines may disturb the
+                           separation of lines. Instead of 0, the threshold
+                           value of is used to separate the clusters. If set to
+                           high, short lines may be dropped of. (default: 2)
+  -k,--keep-single-glyphs-lines
+                           Do not drop glyphs found between the lines. By
+                           default, lines with a count of glyphs under THRESHOLD
+                           are dropped.
+  --steps-per-line STEPS   With the STEPS per line you may tweak the clustering
+                           algorithm for the indentification of
+                           lines. (default: 5)
+  --iterations ARG         number of learning iterations (default: 100)
+  --rate ARG               Learning rate (default: 1.0e-2)
+  --momentum ARG           Learning momentum (default: 0.9)
+  --l2 ARG                 Learning regulizer (default: 5.0e-4)
+  TRAININGPDF              Path to PDF (or XML) with training text.
+  TRAININGTEXT             Path to plaintext with correct spaces which
+                           corresponds exactly to TRAININGPDF.
+  VALIDATIONPDF            Path to PDF (or XML) with validation text.
+  VALIDATIONTEXT           Path to plaintext with correct spaces which
+                           corresponds exactly to VALIDATIONPDF.
+  NETFILE                  Path to the file where to dump the trained network
+                           in. The file will be in a binary format, so ".dat" is
+                           a reasonable suffix.

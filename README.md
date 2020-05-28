@@ -7,7 +7,9 @@ for works printed in German *black letter*, aka *Gothic letter*
 (Frakturschrift). But as long as there's is no good text extraction
 tool that can deal with the slight variances in the glyph line up of
 scanned books, this valuable resource remains unused by text mining
-and NLP folks.
+and NLP folks. `scannedb-ok` was written to always correctly extract
+the *lines* of the text and to insert *spaces* correctly even in
+complicated cases like emphasis with spaced letters.
 
 [`pdftotext`](https://www.xpdfreader.com/pdftotext-man.html) does a
 valuable job in text extraction, but too often fails with lines or
@@ -24,36 +26,38 @@ extract two or more columns, though.
 ## Features
 
 - collects glyphs of each line by a clustering algorithm
-- inserts inter-word spaces based on adjustable factors. There is also
-  an experimental command for training an artificial neural network
-  for inserting spaces on the ANN branch.
-- drops glyphs outside of the type area
-- drops single glyphs between lines
+- inserts inter-word spaces based on either a rule-based mechanism or
+  an artificial neural network (ANN). While the rule-based mechanism works
+  in most common cases, the ANN inserts spaces correctly even in
+  complicated cases like spaced letters for emphasis.
+- optionally drops glyphs outside of the type area
+- optionally drops single glyphs between lines
 - identifies types of lines: e.g. first line of paragraph, page
   header and footer, sheet signature etc.
 - gives options for formatting (indenting) these line types
-- repairs syllable division at line breaks
-- besides plain text output, can generate
-	- a word pool for repairing syllable divisions
-	- scriptura continua
-	- statistics about each page
-	- a csv with coordinates of glyphs for further analysis
+- repairs syllable division at line breaks (experimental)
+- besides plain text output, can
+	- generate a word pool for repairing syllable divisions
+	- train an ANN that can be used for inserting inter-word spaces
+	- output scriptura continua
+	- print statistics about each page
+	- generate csv with coordinates of glyphs for further analysis
 
 `scannedb-ok` is written in [Haskell](https://www.haskell.org/). It is
 a library and a commandline tool. It was written as a generic tool
 which can be plugged into an arbitrary PDF parsing library. To achieve
 this, it's functionality is defined for
-[type classes](https://www.schoolofhaskell.com/school/starting-with-haskell/introduction-to-haskell/5-type-classes)
-(the most important is [`Glyph`](src/Pdf/Extract/Glyph.hs)), which can
-then be instantiated by the data types of a parser. Right now it can
-read PDFs using the
-[`pdf-toolbox`](https://github.com/Yuras/pdf-toolbox) written in
-Haskell, or the XML representation of a PDF document, which is yielded
-by PDFMiner's `pdf2txt.py -t xml ...` command. The results of the
-pipeline `pdfminer -t xml ... | scannedb-ok -x` are very promising (see
-[example](#example) below), while parsing PDFs directly with the
-`pdf-toolbox` still suffers from several deficiencies. **At the moment,
-piping PDFMiner's `-t xml`-output into `scannedb-ok` is the way to go.**
+[type classes](https://www.schoolofhaskell.com/school/starting-with-haskell/introduction-to-haskell/5-type-classes),
+the most important is [`Glyph`](src/Pdf/Extract/Glyph.hs), which can
+be instantiated by the data types of a parser. Right now it can read
+PDFs using the [`pdf-toolbox`](https://github.com/Yuras/pdf-toolbox)
+written in Haskell, or the XML representation of a PDF document, which
+is yielded by PDFMiner's `pdf2txt.py -t xml ...` command. The results
+of the pipeline `pdfminer -t xml ... | scannedb-ok -x` are very
+promising (see [example](#example) below), while parsing PDFs directly
+with the `pdf-toolbox` still suffers from several deficiencies. **At
+the moment, piping PDFMiner's `-t xml`-output into `scannedb-ok` is
+the way to go.**
 
 `scannedb-ok` is still under development.
 
@@ -66,9 +70,9 @@ the haskell build tool, is required.
 Clone this repository and `cd` into the `scannedb-ok` directory and
 run
 
-		stack setup
-		stack build
-		stack install # optional
+	stack setup
+	stack build
+	stack install # optional
 
 The build command will take a while. The first 2 commands will not
 install anything outside the `scannedb-ok` folder. If you want to test
@@ -77,18 +81,37 @@ the commandline tool from the `scannedb-ok` directory using
 
 	stack exec -- scannedb-ok --help
 
-This will show you the options and arguments which you can chose to
-optimize the extraction result. E.g. `1.3` has shown to be a good
-choice for the fixed spacing factor. See below for an example.
 
 ## Usage
 
-`scannedb-ok` is a command line program. You definitively have to run
+`scannedb-ok` is a command line program. Please run
 
 	scannedb-ok --help
 
-and read about the command line options. [Here](docs/usage) is the
-output of the help command.
+and read about the commands `scannedb-ok` offers. [Here](docs/usage)
+is the output of the help command. There are the following
+commands.
+
+- [`text`](docs/usage-text): extract text from a document
+- [`words`](docs/usage-words): generate a list of words in a document, but leave possibly
+  tokens divided by syllable division on line breaks. It leaves the
+  first and the last token of each line.
+- [`trainSpacing`](docs/usage-trainSpacing): train and dump an ANN for inserting inter-word
+  spaces. This requires at least one *pair of files*, one PDF or XML
+  with glyph information and one plain text file containing exactly
+  the same text with correct inter-word spaces. One or two pages of
+  such training data seem to be enough for good results. The trained
+  ANN can be load for the `text` and `words` commands. 
+- [`nospaces`](docs/usage-nospaces): extract the text from a document without inserting
+  spaces.
+- [`stats`](docs/usage-stats): show statistics about each page of a document
+- [`spacing`](docs/usage-spacing): print information about inter-glyph distances, glyph
+  positions and size for further analysis by external tools
+- [`glyphs`](docs/usage-glyphs): print information about the glyphs of a document
+
+To get help about one of these commands, please run
+
+	scannedb-ok COMMAND --help
 
 
 ## How it works / Heuristics
@@ -99,10 +122,42 @@ The PDF-Format does not even know the concept of spaces!  Adding
 inter-word spaces turned out to work good based on a fixed factor: If
 the distance to the next glyph exceeds the product of the width and a
 fixed spacing factor, then insert a space. The factor may be changed
-with a command line argument.
+with a command line argument. A reasonable factor is used by default.
 
-I'm currently working on training an artificial neural network for
-recognizing where to insert spaces. See the ANN branch.
+While this rule-based mechanism works for most common cases, there are
+some printing styles in old books, that require a more sophisticated
+algorithm for inserting inter-word spaces. The rule-based mechanism
+often fails for spaces letters, which are commonly used for emphasis
+from the 16. to 19. centuries.
+
+In order to provide a mechanism that still inserts spaces correctly,
+an artificial neural network can be trained. It works on the fact that
+the aspect ratios of spaced letter glyphs differ from the aspect
+ratios of normal glyphs (at least most of the times in google
+books). The ANN evaluates 2 preceding and 2 succeeding glyphs of a
+glyph (roughly 50 data points for each glyph).
+
+Here is an example of training a network based on files in the `test`
+folder:
+
+	scannedb-ok trainSpacing --momentum 0.9 --iterations 5 -x test/Dre1793.xml test/Dre1793-manual.txt test/Heg1835a_p205-p205.xml test/Heg1835a_p205-p205-fixed1.6.txt net.dat
+
+This will train a network from the file pair `test/Dre1793.xml` and
+`test/Dre1793-manual.txt` and then dump it into `net.dat`. The trained
+network can be used for text extraction like this:
+
+	scannedb-ok text test/Heg1835a_p205-p205.xml -x -n net.dat
+
+Please note that training a network is based on some randomness. This
+means that the precision gained by the network is not always the
+same. Sometimes there is no learning progression during all the
+training iterations. If this is the case, simply try to rerun the
+training command. For the `Dre1793` training data, the trained network
+should have a
+[precision](https://en.wikipedia.org/wiki/Precision_and_recall) of at
+least 98% and recall of at least 99%. For production, do 100 training
+iterations at least.
+
 
 ### Collect the glyphs of a Line
 

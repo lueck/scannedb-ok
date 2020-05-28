@@ -1,0 +1,35 @@
+scannedb-ok nospaces - extract text without spaces.
+
+Usage: scannedb-ok nospaces ([-p|--pdf] | [-x|--xml]) [-r|--pages PAGES]
+                            [-l|--lines-per-page LINES] [--threshold THRESHOLD]
+                            [-k|--keep-single-glyphs-lines]
+                            [--steps-per-line STEPS] INFILE
+  scannedb-ok nospaces extracts the text from a PDF without inserting spaces,
+  i.e. it produces scriptura continua.
+
+Available options:
+  -h,--help                Show this help text
+  -p,--pdf                 PDF input data. (Default)
+  -x,--xml                 XML input data. An XML representation of the glyphs
+                           of a PDF file, like produced with PDFMiner's
+                           "pdf2txt.py -t xml ..." command.
+  -r,--pages PAGES         Ranges of pages to extract. Defaults to all.
+                           Examples: 3-9 or -10 or 2,4,6,20-30,40- or "*" for
+                           all. Except for all do not put into quotes.
+  -l,--lines-per-page LINES
+                           Lines per page. Lines of a vertically filled page.
+                           This does not need to be exact. (default: 42)
+  --threshold THRESHOLD    A threshold value important for the identification of
+                           lines by the internal clustering algorithm:
+                           Fail-OCRed glyphs between the lines may disturb the
+                           separation of lines. Instead of 0, the threshold
+                           value of is used to separate the clusters. If set to
+                           high, short lines may be dropped of. (default: 2)
+  -k,--keep-single-glyphs-lines
+                           Do not drop glyphs found between the lines. By
+                           default, lines with a count of glyphs under THRESHOLD
+                           are dropped.
+  --steps-per-line STEPS   With the STEPS per line you may tweak the clustering
+                           algorithm for the indentification of
+                           lines. (default: 5)
+  INFILE                   Path to the input file.

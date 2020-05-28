@@ -1,0 +1,129 @@
+scannedb-ok words - Generate a list of words from the document.
+
+Usage: scannedb-ok words ([-p|--pdf] | [-x|--xml]) [-r|--pages PAGES]
+                         [-l|--lines-per-page LINES] [--threshold THRESHOLD]
+                         [-k|--keep-single-glyphs-lines]
+                         [--steps-per-line STEPS] ([-f|--spacing-factor SPACING]
+                         | [-n|--spacing-net NETFILE]) ([-i|--by-indent]
+                         [--par-indent PARINDENT] [--custos-indent CUSTOSINDENT]
+                         [--sig-indent SIGINDENT] [--sig-filling SIGFILL]
+                         [--quote-parsing] [-M|--drop-margin]
+                         ([--head-keep-page] | [--head-drop] | [--head-keep])
+                         ([--foot-keep-page] | [--foot-drop] | [--foot-keep])
+                         ([--custos-drop] | [--custos-keep]) ([--sig-drop] |
+                         [--sig-keep]) [--page-pre PAGEPRE]
+                         [--page-post PAGEPOST] [--par PAR] [--custos CUSTOS]
+                         [--sig SIG] [--blockquote BLOCKQUOTE]
+                         [-w|--word-pool WORDPOOL]
+                         [-D|--no-division-mark-required] |
+                         [-C|--no-categorization] [--headlines HEADLINES]
+                         [--footlines FOOTLINES]) [--nlp] INFILE
+  scannedb-ok words extracts a list of all non-divided words from the document.
+  The first an the last word or word-part of a line is left from the list, since
+  they may be parts of word due to syllable division.
+
+Available options:
+  -h,--help                Show this help text
+  -p,--pdf                 PDF input data. (Default)
+  -x,--xml                 XML input data. An XML representation of the glyphs
+                           of a PDF file, like produced with PDFMiner's
+                           "pdf2txt.py -t xml ..." command.
+  -r,--pages PAGES         Ranges of pages to extract. Defaults to all.
+                           Examples: 3-9 or -10 or 2,4,6,20-30,40- or "*" for
+                           all. Except for all do not put into quotes.
+  -l,--lines-per-page LINES
+                           Lines per page. Lines of a vertically filled page.
+                           This does not need to be exact. (default: 42)
+  --threshold THRESHOLD    A threshold value important for the identification of
+                           lines by the internal clustering algorithm:
+                           Fail-OCRed glyphs between the lines may disturb the
+                           separation of lines. Instead of 0, the threshold
+                           value of is used to separate the clusters. If set to
+                           high, short lines may be dropped of. (default: 2)
+  -k,--keep-single-glyphs-lines
+                           Do not drop glyphs found between the lines. By
+                           default, lines with a count of glyphs under THRESHOLD
+                           are dropped.
+  --steps-per-line STEPS   With the STEPS per line you may tweak the clustering
+                           algorithm for the indentification of
+                           lines. (default: 5)
+  -f,--spacing-factor SPACING
+                           Use a fixed-spacing-factor rule for inserting
+                           inter-word spaces. If the distance between two glyphs
+                           exceeds the product of the first glyphs width and
+                           this factor, a space is inserted. For Gothic letter
+                           scanned by google values down to 1 are
+                           promising. (default: 1.3)
+  -n,--spacing-net NETFILE Use a trained artificial neural network for inserting
+                           inter-word spaces.
+  -i,--by-indent           Categorize lines by their indentation. (Default)
+  --par-indent PARINDENT   Minimal indentation of the first line of a new the
+                           paragraph. In portion of a quad or 'em' (dt.
+                           Geviert). This is the most important parameter to
+                           tinker with. (default: 3.0)
+  --custos-indent CUSTOSINDENT
+                           Minimal indentation of the custos (dt. Kustode), i.e.
+                           the first syllable of the next page in the bottom
+                           line. In portion of the page width. (default: 0.667)
+  --sig-indent SIGINDENT   Minimal indentation of the sheet signature in portion
+                           of the page width. (default: 3.33e-2)
+  --sig-filling SIGFILL    Maximal filling of the bottom line if it's a sheet
+                           signature. (default: 0.333)
+  --quote-parsing          Use this option if you want to parse for block
+                           quotes. (Experimental) This might interfere with the
+                           parsing for new paragraphs. The difference is that a
+                           block quote's font size is assumed to be a few
+                           smaller. But clustering for the base font size is
+                           still experimental and has no good results for gothic
+                           script.
+  -M,--drop-margin         Drop glyphs found outside of the type area. The type
+                           area is determined by a clustering algorithm which
+                           assumes that the most lines completely fill the type
+                           area horizontally. Do not use this switch, if this is
+                           not the case for your text. It may produce errors on
+                           pages with only one or two lines.
+  --head-keep-page         Keep only the page number found in the headline.
+                           (Default)
+  --head-drop              Drop the whole headline.
+  --head-keep              Keep the whole headline.
+  --foot-keep-page         Keep only the page number found in the footline.
+                           (Default)
+  --foot-drop              Drop the whole footline.
+  --foot-keep              Keep the whole footline.
+  --custos-drop            Drop the custos, i.e. the bottom line which contains
+                           the first syllable of the next page. (Default)
+  --custos-keep            Keep the custos.
+  --sig-drop               Drop the sheet signature in the bottom line.
+                           (Default)
+  --sig-keep               Keep the sheet signature.
+  --page-pre PAGEPRE       The prefix for the page number if only the number is
+                           kept of a head- or footline. (default: "[[")
+  --page-post PAGEPOST     The postfix for the page number if only the number is
+                           kept of a head- or footline. (default: "]]")
+  --par PAR                The prefix for linearizing the first line of a
+                           paragraph. (default: "\n\t")
+  --custos CUSTOS          The prefix for linearizing the
+                           custos. (default: "\t\t\t\t\t")
+  --sig SIG                The prefix for linearizing the sheet
+                           signature. (default: "\t\t\t")
+  --blockquote BLOCKQUOTE  The prefix for linearizing a block
+                           quote. (default: "\t\t$$")
+  -w,--word-pool WORDPOOL  If a path to file with a pool of words (tokens) is
+                           given, syllable division is repaired in the text
+                           output, but only when line categorization is turned
+                           on. The "words" command may be used to generate word
+                           pools.
+  -D,--no-division-mark-required
+                           Use this switch, if syllable division is to be
+                           repaired for lines without dash mark.
+  -C,--no-categorization   Do not categorize the lines at all.
+  --headlines HEADLINES    Count of lines in the page header to be
+                           dropped. (default: 0)
+  --footlines FOOTLINES    Count of lines in the page footer to be
+                           dropped. (default: 0)
+  --nlp                    Convient toggle for NLP-friendly output when
+                           categorizing lines by-indent (see -i) and drop page
+                           signature, drop custos, no indentation of categorized
+                           lines. This sets PAR to newline "\n" and BLOCKQUOTE
+                           to the empty string "".
+  INFILE                   Path to the input file.

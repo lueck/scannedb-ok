@@ -1,145 +1,48 @@
-scannedb-ok - extract text from a PDF, even scanned books.
+scannedb-ok -- A tool for extracting text from a PDF that even works for scanned
+books.
 
-Usage: scannedb-ok ([-p|--pdf] | [-x|--xml]) ([-t|--text] | [--no-spaces] |
-                   [--statistics] | [--spacing] | [--glyphs] | [--tokens])
-                   [-r|--pages PAGES] [-l|--lines-per-page LINES]
-                   [--threshold THRESHOLD] [-k|--keep-single-glyphs-lines]
-                   [--steps-per-line STEPS] [-f|--spacing-factor SPACING]
-                   ([-i|--by-indent] [--par-indent PARINDENT]
-                   [--custos-indent CUSTOSINDENT] [--sig-indent SIGINDENT]
-                   [--sig-filling SIGFILL] [--quote-parsing] [-M|--drop-margin]
-                   ([--head-keep-page] | [--head-drop] | [--head-keep])
-                   ([--foot-keep-page] | [--foot-drop] | [--foot-keep])
-                   ([--custos-drop] | [--custos-keep]) ([--sig-drop] |
-                   [--sig-keep]) [--page-pre PAGEPRE] [--page-post PAGEPOST]
-                   [--par PAR] [--custos CUSTOS] [--sig SIG]
-                   [--blockquote BLOCKQUOTE] [-w|--word-pool WORDPOOL]
-                   [-D|--no-division-mark-required] | [-C|--no-categorization]
-                   [--headlines HEADLINES] [--footlines FOOTLINES]) [--nlp]
-                   INFILE
-  scannedb-ok extracts the text from a PDF and was written to work for scanned
-  books from books.google.com. There are options for stripping of page headers
-  and footers in order to make the pure text ready for text mining and NLP. Take
-  care of the parentheses, square brackets and pipes in the usage note.
-  Parentheses group options together, the pipe divides (groups of options) into
-  alternatives. Square brackets mean that the option is optional. There are two
-  input formats, pdf and xml. There are six output formats: --text which is the
-  default, --no-spaces for scriptura continua, --statistics for information on
-  each page, --spacing for csv output with information on glyphs an inter-glyph
-  spacing, --glyphs for an internal representation of glyphs, --tokens for
-  output of a list of words which can be reused for repairing syllable
-  divisions. There are two modes of line detection: -i for categorization of
-  lines into headline, footline etc., -C for no such categorization at all.
-  These modes have various options. The order of the command line arguments does
-  not matter.
+Usage: scannedb-ok COMMAND
+  scannedb-ok is a tool for extracting the text from a PDF and was written to
+  work for scanned books from books.google.com. It was designed to always
+  correctly extract the LINES of the text, to insert SPACES even in complicated
+  cases like emphasis with spaced letters and to repair SYLLABLE DIVISION at
+  line breaks. There are commands for extracting text, training an artificial
+  neural network, printing statistics etc. Type "scannedb-ok COMMAND -h" for
+  information about a command.
 
 Available options:
   -h,--help                Show this help text
-  -p,--pdf                 PDF input data. (Default)
-  -x,--xml                 XML input data. An XML representation of the glyphs
-                           of a PDF file, like produced with PDFMiner's
-                           "pdf2txt.py -t xml ..." command.
-  -t,--text                Extract text. (Default)
-  --no-spaces              Extract text without spaces. (PDF really does not
-                           even know the concept of spaces!)
-  --statistics             Show statistics about the text.
-  --spacing                Extract inter-glyph distances for statistical
-                           analysis. This generates CSV output.
-  --glyphs                 Show the information about the glyphs found in the
-                           document.
-  --tokens                 Generate a list of tokens from the document.
-  -r,--pages PAGES         Ranges of pages to extract. Defaults to all.
-                           Examples: 3-9 or -10 or 2,4,6,20-30,40- or "*" for
-                           all. Except for all do not put into quotes.
-  -l,--lines-per-page LINES
-                           Lines per page. Lines of a vertically filled page.
-                           This does not need to be exact. (default: 42)
-  --threshold THRESHOLD    A threshold value important for the identification of
-                           lines by the internal clustering algorithm:
-                           Fail-OCRed glyphs between the lines may disturb the
-                           separation of lines. Instead of 0, the threshold
-                           value of is used to separate the clusters. If set to
-                           high, short lines may be dropped of. (default: 2)
-  -k,--keep-single-glyphs-lines
-                           Do not drop glyphs found between the lines. By
-                           default, lines with a count of glyphs under THRESHOLD
-                           are dropped.
-  --steps-per-line STEPS   With the STEPS per line you may tweak the clustering
-                           algorithm for the indentification of
-                           lines. (default: 5)
-  -f,--spacing-factor SPACING
-                           A fixed spacing factor. If the distance between two
-                           glyphs exceeds the product of the first glyphs width
-                           and this factor, a space is inserted. For Gothic
-                           letter scanned by google values down to 1 are
-                           promising. (default: 1.3)
-  -i,--by-indent           Categorize lines by their indentation. (Default)
-  --par-indent PARINDENT   Minimal indentation of the first line of a new the
-                           paragraph. In portion of a quad or 'em' (dt.
-                           Geviert). This is the most important parameter to
-                           tinker with. (default: 3.0)
-  --custos-indent CUSTOSINDENT
-                           Minimal indentation of the custos (dt. Kustode), i.e.
-                           the first syllable of the next page in the bottom
-                           line. In portion of the page width. (default: 0.667)
-  --sig-indent SIGINDENT   Minimal indentation of the sheet signature in portion
-                           of the page width. (default: 3.33e-2)
-  --sig-filling SIGFILL    Maximal filling of the bottom line if it's a sheet
-                           signature. (default: 0.333)
-  --quote-parsing          Use this option if you want to parse for block
-                           quotes. (Experimental) This might interfere with the
-                           parsing for new paragraphs. The difference is that a
-                           block quote's font size is assumed to be a few
-                           smaller. But clustering for the base font size is
-                           still experimental and has no good results for gothic
-                           script.
-  -M,--drop-margin         Drop glyphs found outside of the type area. The type
-                           area is determined by a clustering algorithm which
-                           assumes that the most lines completely fill the type
-                           area horizontally. Do not use this switch, if this is
-                           not the case for your text. It may produce errors on
-                           pages with only one or two lines.
-  --head-keep-page         Keep only the page number found in the headline.
-                           (Default)
-  --head-drop              Drop the whole headline.
-  --head-keep              Keep the whole headline.
-  --foot-keep-page         Keep only the page number found in the footline.
-                           (Default)
-  --foot-drop              Drop the whole footline.
-  --foot-keep              Keep the whole footline.
-  --custos-drop            Drop the custos, i.e. the bottom line which contains
-                           the first syllable of the next page. (Default)
-  --custos-keep            Keep the custos.
-  --sig-drop               Drop the sheet signature in the bottom line.
-                           (Default)
-  --sig-keep               Keep the sheet signature.
-  --page-pre PAGEPRE       The prefix for the page number if only the number is
-                           kept of a head- or footline. (default: "[[")
-  --page-post PAGEPOST     The postfix for the page number if only the number is
-                           kept of a head- or footline. (default: "]]")
-  --par PAR                The prefix for linearizing the first line of a
-                           paragraph. (default: "\n\t")
-  --custos CUSTOS          The prefix for linearizing the
-                           custos. (default: "\t\t\t\t\t")
-  --sig SIG                The prefix for linearizing the sheet
-                           signature. (default: "\t\t\t")
-  --blockquote BLOCKQUOTE  The prefix for linearizing a block
-                           quote. (default: "\t\t$$")
-  -w,--word-pool WORDPOOL  If a path to file with a pool of words (tokens) is
-                           given, syllable division is repaired in the text
-                           output, but only when line categorization is turned
-                           on.
-  -D,--no-division-mark-required
-                           Use this switch, if syllable division is to be
-                           repaired for lines without dash mark.
-  -C,--no-categorization   Do not categorize the lines at all.
-  --headlines HEADLINES    Count of lines in the page header to be
-                           dropped. (default: 0)
-  --footlines FOOTLINES    Count of lines in the page footer to be
-                           dropped. (default: 0)
-  --nlp                    Convient toggle for NLP-friendly output when
-                           categorizing lines by-indent (see -i) and drop page
-                           signature, drop custos, no indentation of categorized
-                           lines. This sets PAR to newline "\n" and BLOCKQUOTE
-                           to the empty string "".
-  INFILE                   Path to the input file.
+
+Available commands:
+  text                     scannedb-ok text extracts the text from a PDF. There
+                           are options for stripping of page headers and footers
+                           in order to make the pure text ready for text mining
+                           and NLP. There are two input formats, pdf and xml.
+  words                    scannedb-ok words extracts a list of all non-divided
+                           words from the document. The first an the last word
+                           or word-part of a line is left from the list, since
+                           they may be parts of word due to syllable division.
+  trainSpacing             scannedb-ok trainSpacing trains an ANN for
+                           inter-glyph spacing. This requires four input files:
+                           TRAININGPDF and TRAININGTXT must contain exactly the
+                           same text, once in PDF format (or some other format
+                           conaining glyph descriptions, like pdfminers xml),
+                           and once as plaintext with correct spaces. This pair
+                           of files is used for training the neurons.
+                           VALIDATIONPDF and VALIDATIONTXT have to be exactly
+                           corresponding texts, too. They are used to validate
+                           the trained network after each learning iteration and
+                           the validation result is logged, so that the
+                           progression can be observed. For a start, you can
+                           simply reuse the first pair of files as validation
+                           texts.
+  nospaces                 scannedb-ok nospaces extracts the text from a PDF
+                           without inserting spaces, i.e. it produces scriptura
+                           continua.
+  stats                    scannedb-ok stats shows statistics about the text.
+  spacing                  scannedb-ok spacing shows the inter-glyph distances
+                           for statistical analysis. This generates CSV output.
+  glyphs                   scannedb-ok glyphs shows information about the glyphs
+                           found in the document.
+
+See also: https://github.com/lueck/scannedb-ok#readme
