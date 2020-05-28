@@ -111,6 +111,14 @@ leftSpacingToString ((SpaceAfter a):xs) = a : ' ' : (leftSpacingToString xs)
 leftSpacingToString ((SpaceBefore a):xs) = ' ' : a : (leftSpacingToString xs)
 
 
+-- | Linearize to 'LeftSpacing' to 'T.Text'.
+leftSpacingToText :: [LeftSpacing T.Text] -> T.Text
+leftSpacingToText [] = ""
+leftSpacingToText ((NoSpace a):xs) = a <> (leftSpacingToText xs)
+leftSpacingToText ((SpaceAfter a):xs) = a <> " " <> (leftSpacingToText xs)
+leftSpacingToText ((SpaceBefore a):xs) = " " <> a <> (leftSpacingToText xs)
+
+
 -- | Helper function for cleaning plain text for training.
 cleanForSpaceTraining :: T.Text -> [T.Text]
 cleanForSpaceTraining =
@@ -266,7 +274,7 @@ mkTrainingShapes pre succ txtLine glyphs' =
     glyphsTxt = T.concat . mapMaybe text -- glyphs
 
 
--- | Generated shaped training data with a window showing 2
+-- | Generate shaped training data with a window showing 2
 -- predecessors and 2 successor.
 mkTrainingShapes22
   :: (Glyph g) =>
@@ -274,6 +282,35 @@ mkTrainingShapes22
   -> [g]                    -- ^ a line of glyphs
   -> Either String [SpacingRow]
 mkTrainingShapes22 = mkTrainingShapes 2 2
+
+
+-- | Generate shaped data to be run through the network. This is a
+-- generic function for generating shaped data with n preceeding and m
+-- succeeding glyphs.
+mkRunningShapes
+  :: (KnownNat n, Glyph g) =>
+     Int                    -- ^ number of predecessors in window
+  -> Int                    -- ^ number of successors in window
+  -> [g]                    -- ^ a line of glyphs
+  -> Either String [S ('D1 n)]
+mkRunningShapes pre succ glyphs =
+  ifEitherP
+  ((== (length glyphs)) . length)
+  (const "Error while generating data: input vector does not fit into shape")
+  id $
+  catMaybes $
+  map fromStorable $
+  mkSpacingVectors pre succ glyphs
+  where
+    ifEitherP p l r val
+      | p val = Right $ r val
+      | otherwise = Left $ l val
+
+
+-- | Generate shaped data for a network with 2 predecessors and 2
+-- successors.
+mkRunningShapes22 :: Glyph g => [g] -> Either String [SpacingShape]
+mkRunningShapes22 = mkRunningShapes 2 2
 
 
 -- | The shape of data input into the ANN.
@@ -355,29 +392,25 @@ spacingPrecision res =
     recall = (fromIntegral truePos) / (fromIntegral $ truePos + falseNegs)
 
 
--- | Run the trained network a line of 'Glyph's.
+-- | Run the trained network a line of 'Glyph's. The glyphs should be
+-- sorted like in 'linearizeLine'.
 runSpacingNetOnLine
   :: (Glyph g) =>
      SpacingNet
-  --   -> (T.Text -> [g] -> Either String [(S ('D1 n), SpacingOutput)])
   -> [g]
   -> Either String T.Text
-runSpacingNetOnLine network glyphs' =
-  fmap (T.pack .
-        leftSpacingToString .
+runSpacingNetOnLine network glyphs =
+  fmap (leftSpacingToText .
         (map (uncurry (runSpacingNet network))) .
-        (zip (T.unpack glyphsTxt)) .
-        (map fst)) $
-  mkTrainingShapes22 glyphsTxt glyphs -- FIXME: make generic
+        (zip glyphsTxt)) $
+  mkRunningShapes22 glyphs
   where
-    glyphs = sortOn xLeft glyphs'
-     -- A Text is needed for reusing mkTrainingShapes, but thrown
-     -- away:
-    glyphsTxt = T.concat $ mapMaybe text glyphs
+    glyphsTxt = map ((fromMaybe missingGlyph) . text) glyphs
+    missingGlyph = "_"
 
 
 -- | Run the trained network on input data.
-runSpacingNet :: SpacingNet -> Char -> SpacingShape -> LeftSpacing Char
+runSpacingNet :: SpacingNet -> a -> SpacingShape -> LeftSpacing a
 runSpacingNet net char input =
   spaceFromLabel char $ runNet net input
 

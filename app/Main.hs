@@ -680,15 +680,15 @@ run (TrainSpacing PdfMinerXml lineOpts iterations rate trainingPdf trainingTxt v
   hPutStrLn stderr "Training..."
   initialNet <- randomSpacingNet
   trained <- foldM (runSpacingIteration stderr (concat td) (concat vd) rate) initialNet [1..iterations]
-  hPutStrLn stderr " done"
-  hPutStr stderr $ "Dumping trained network to " ++ netFile
+  hPutStrLn stderr " done (Training)"
+  hPutStr stderr $ "Dumping trained network to " ++ netFile ++ " ..."
   B.writeFile netFile $ runPut $ put trained
   hPutStrLn stderr " done"
-  hPutStrLn stderr "Trained network run on validation data:"
   -- print td
-  mapM_ (\gs -> do
-            l <- reportErrors $ runSpacingNetOnLine trained gs
-            T.putStrLn l) (concat validationGlyphLines)
+  -- hPutStrLn stderr "Trained network run on validation data:"
+  -- mapM_ (\gs -> do
+  --           l <- reportErrors $ runSpacingNetOnLine trained gs
+  --           T.putStrLn l) (concat validationGlyphLines)
 
 run _ = do
   fail "This command is not defined for this input type."
