@@ -1,6 +1,6 @@
 name:                scannedb-ok
 synopsis:            "Text extraction from PDF, specially from scanned books"
-version:             0.0.2.0
+version:             0.0.2.1
 github:              "lueck/scannedb-ok"
 license:             BSD-3-Clause OR Apache-2.0
 author:              "Christian Lück"

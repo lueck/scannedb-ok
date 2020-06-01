@@ -1,6 +1,4 @@
 {-# LANGUAGE OverloadedStrings
-, TemplateHaskell
-, DeriveGeneric
 , DataKinds
 , BangPatterns
 , TupleSections
@@ -421,48 +419,3 @@ spaceFromLabel char (S1D label) = mkSpace char $ maxIndex $ SA.extract label
   where
     mkSpace char 0 = NoSpace char
     mkSpace char 1 = SpaceAfter char
-
-
--- * Exporting spacing information
-
--- This is deprecated code an will go in the next version
-
-
-data Spacing = Spacing
-  { _sp_char :: T.Text
-  , _sp_next :: T.Text
-  , _sp_dist :: Double
-  , _sp_width :: Double
-  , _sp_size :: Double
-  , _sp_left :: Double
-  , _sp_bottom :: Double        -- ^ For mining for lines on a single page
-  , _sp_font :: T.Text
-  , _sp_line :: Maybe Int
-  , _sp_page :: Maybe Int
-  } deriving (Eq, Show, Generic)
-
-makeLenses ''Spacing
-
-
--- | 'Spacing' ready for CSV export.
-instance Csv.ToRecord Spacing
-
-
--- | Get the inter-glyph spacings of a line of glyphs. The line is
--- required to be sorted by xLeft value of the glyphs.
-spacingsInLine :: Glyph g => Maybe Int -> Maybe Int -> [g] -> [Spacing]
-spacingsInLine _ _ [] = []
-spacingsInLine _ _ (_:[]) = []
-spacingsInLine l p (g1:g2:gs) =
-  (maybeToList $ Spacing
-    <$> text g1
-    <*> text g2
-    <*> Just ((xLeft g2) - (xLeft g1))
-    <*> (Just $ width g1)
-    <*> (Just $ size g1)
-    <*> (Just $ xLeft g1)
-    <*> (Just $ yBottom g1)
-    <*> (Just $ T.pack $ fromMaybe "unkown" $ font g1)
-    <*> Just l
-    <*> Just p)
-  ++ spacingsInLine l p (g2:gs)

@@ -641,24 +641,32 @@ run (Info inMeth ranges lineOpts inFile) = do
 
 run (ExtractGlyphs inMeth ranges lineOpts inFile) = do
   pages <- getGlyphs inMeth ranges inFile
-  mapM_ (putStrLn . show) $ concatMap snd pages
+  forM_ pages (\(page, glyphs) -> do
+                  let lines = findLinesWindow lineOpts glyphs
+                      lines_ = zip ([1..]::[Int]) $ map (sortOn xLeft) lines
+                      glyphTuple = (,,,,,,) <$> const page <*> fst <*> (text . snd) <*> (xLeft .snd) <*> (yBottom .snd) <*> (width . snd) <*> (size . snd)
+                      propagateNum num l = zip (repeat num) l
+                  mapM_ (C.putStr . Csv.encode . (map glyphTuple) . (uncurry propagateNum)) lines_)
 
 run (SpacingStats inMeth ranges lineOpts inFile) = do
   pages <- getGlyphs inMeth ranges inFile
   forM_ pages (\(page, glyphs) -> do
                   let lines = findLinesWindow lineOpts glyphs
-                      lines_ = zip3 (map Just [1..])
-                               (repeat (Just page))
-                               $ map (sortOn xLeft) lines
-                      csvOpts = Csv.defaultEncodeOptions {
-                        Csv.encDelimiter = fromIntegral $ ord ','
-                        }
-                  mapM (C.putStr .
-                         (Csv.encodeWith csvOpts) .
-                         (uncurry3 spacingsInLine)) lines_)
-  where
-    getGlyph :: Glyph g => (a, b, [g]) -> [g]
-    getGlyph (_, _, g) = g
+                      lines_ = zip ([1..]::[Int]) $ map (sortOn xLeft) lines
+                  mapM (C.putStr . Csv.encode . (uncurry (spacingsInLine page))) lines_)
+    where
+      spacingsInLine _ _ [] = []
+      spacingsInLine _ _ (_:[]) = []
+      spacingsInLine p l (g1:g2:gs) =
+        ( p
+        , l
+        , (text g1)
+        , (text g2)
+        , ((xLeft g2) - (xLeft g1))
+        , (width g1)
+        , (size g1)
+        , (width g2)
+        , (size g2)):(spacingsInLine p l (g2:gs))
 
 run (TrainSpacing PdfMinerXml lineOpts iterations rate trainingPdf trainingTxt validationPdf validationTxt netFile) = do
   ranges <- parseRanges "*"
