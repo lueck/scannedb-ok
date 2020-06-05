@@ -549,8 +549,7 @@ getPdfGlyphs :: String             -- ^ range
 getPdfGlyphs pages inputFile = do
   hPutStrLn stderr "PDF input does not work good at the moment, due to a third-party PDF-parsing library. Please, consider using the -x option!"
   ranges <- parseRanges pages
-  withBinaryFile inputFile ReadMode $ \handle -> do
-    pdf <- P.pdfWithHandle handle
+  P.withPdfFile inputFile $ \pdf -> do
     doc <- P.document pdf
     catalog <- P.documentCatalog doc
     rootNode <- P.catalogPageNode catalog

@@ -38,6 +38,9 @@ resolver: lts-12.26
 #  - wai
 packages:
 - .
+# - ../pdf-toolbox/core
+# - ../pdf-toolbox/content
+# - ../pdf-toolbox/document
 
 # Dependency packages to be pulled from upstream that are not in the resolver
 # using the same syntax as the packages field.
@@ -46,8 +49,10 @@ packages:
 extra-deps:
 - range-0.2.1.1
 
-- github: Yuras/pdf-toolbox
-  commit: 900e607c9407f0e0a8c5590953fc2667b2926bfd
+# - github: Yuras/pdf-toolbox
+#   commit: d201d155e83ba9de947f8f89e5c4c245bb88c974
+- github: lueck/pdf-toolbox
+  commit: 0e2fe95b3270b7c90183d9a0bb37c614785e7be4
   subdirs:
       - core
       - content
@@ -55,7 +60,6 @@ extra-deps:
 
 - github: HuwCampbell/grenade
   commit: 5206c95c423d9755e620f41576470a281ba59c89
-
 
 # Override default flag values for local packages and extra-deps
 # flags: {}
