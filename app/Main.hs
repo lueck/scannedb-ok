@@ -640,6 +640,7 @@ run (Info inMeth ranges lineOpts inFile) = do
 
 run (ExtractGlyphs inMeth ranges lineOpts inFile) = do
   pages <- getGlyphs inMeth ranges inFile
+  putStrLn "page,line,character,x-left,y-bottom,width,size"
   forM_ pages (\(page, glyphs) -> do
                   let lines = findLinesWindow lineOpts glyphs
                       lines_ = zip ([1..]::[Int]) $ map (sortOn xLeft) lines
@@ -649,6 +650,7 @@ run (ExtractGlyphs inMeth ranges lineOpts inFile) = do
 
 run (SpacingStats inMeth ranges lineOpts inFile) = do
   pages <- getGlyphs inMeth ranges inFile
+  putStrLn "page,line,character,successor,x-dist,width-character,size-character,width-successor,size-successor"
   forM_ pages (\(page, glyphs) -> do
                   let lines = findLinesWindow lineOpts glyphs
                       lines_ = zip ([1..]::[Int]) $ map (sortOn xLeft) lines
