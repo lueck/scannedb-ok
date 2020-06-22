@@ -97,7 +97,8 @@ data InputMethod = PdfInput | PdfMinerXml
 
 -- | A record for the mechanism for inserting spaces
 data SpaceInsertion
-  = FixedSpacingFactor Double
+  = WidthSpacingFactor Double
+  | SizeSpacingFactor Double
   | ANNSpacing FilePath
 
 -- | A record for the command line arguments on categorizing lines
@@ -134,12 +135,20 @@ inputMethod_ =
 
 spaceInsertion_ :: Parser SpaceInsertion
 spaceInsertion_ =
-  (FixedSpacingFactor
+  (SizeSpacingFactor
+   <$> option auto (short 's'
+                    <> long "size-spacing-factor"
+                    <> help "Use a fixed-spacing-factor rule for inserting inter-word spaces. If the distance between two glyphs exceeds the product of the first glyphs size and this factor, a space is inserted. For Antiqua fonts a space was traditionally 1/3 of the fonts height (size), but should never be less than 1/6. So 1/6 is a good value to start with."
+                    <> value (1/6)
+                    <> showDefault
+                    <> metavar "SPACING"))
+  <|>
+  (WidthSpacingFactor
    <$> option auto (short 'f'
-                    <> long "spacing-factor"
+                    <> long "width-spacing-factor"
                     <> help "Use a fixed-spacing-factor rule for inserting inter-word spaces. If the distance between two glyphs exceeds the product of the first glyphs width and this factor, a space is inserted. For Gothic letter scanned by google values down to 1 are promising."
                     <> value 1.3
-                    <> showDefault
+                    -- <> showDefault
                     <> metavar "SPACING"))
   <|>
   (ANNSpacing
@@ -579,8 +588,12 @@ parseRanges pages = do
 
 -- | This returns a function for inserting inter-word spaces.
 getSpaceInserter :: Glyph g => SpaceInsertion -> IO ([g] -> T.Text)
-getSpaceInserter (FixedSpacingFactor fac) = do
-  return (spacingFactor fac)
+getSpaceInserter (WidthSpacingFactor fac) = do
+  -- hPutStrLn stderr "Rule-based insertion spaces based on glyph widths."
+  return (widthSpacingFactor fac)
+getSpaceInserter (SizeSpacingFactor fac) = do
+  -- hPutStrLn stderr "Rule-based insertion spaces based on font sizes."
+  return (sizeSpacingFactor fac)
 getSpaceInserter (ANNSpacing netFile) = do
   c <- B.readFile netFile
   trained :: SpacingNet <- reportErrors $ runGet get c

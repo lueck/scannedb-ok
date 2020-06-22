@@ -35,24 +35,36 @@ import Pdf.Extract.Glyph
 
 -- * Rule-based insertion of inter-word spaces
 
+-- | Insert spaces on the basis of the size of a glyph. If the
+-- distance to the next glyph exceeds the product of the size and a
+-- spacing factor, insert a space. In Antiqua scripts (english print)
+-- a space was traditionally (at least) a third of the size of a
+-- letter. So 1/3 is a good factor to start with.
+sizeSpacingFactor :: Glyph g => Double -> [g] -> T.Text
+sizeSpacingFactor _ [] = T.empty
+sizeSpacingFactor _ (g:[]) = fromMaybe T.empty $ text g
+sizeSpacingFactor spacing (g:gn:gs)
+  | dist > spacing * (size g) = T.append (fromMaybe T.empty $ text g) $
+                                T.append (T.pack " ") $
+                                sizeSpacingFactor spacing (gn:gs)
+  | otherwise = T.append (fromMaybe T.empty $ text g) $
+                sizeSpacingFactor spacing (gn:gs)
+    where
+      dist = abs((xLeft gn) - (width g) - (xLeft g))
+
+
 -- | Insert spaces on the basis of the width of a glyph. If the
 -- distance to the next glyph exceeds the product of the width and a
 -- spacing factor, insert a space.
---
--- Unfortunately this fails on google books--at least for OCRed scans
--- of german fractur fonts--because there is no width in these fonts:
--- The x value of the bounding box of a glyph has the same
--- value. (This is holds true for test cases parsed with pdf-toolbox
--- and with pdfminer.)
-spacingFactor :: Glyph g => Double -> [g] -> T.Text
-spacingFactor _ [] = T.empty
-spacingFactor _ (g:[]) = fromMaybe T.empty $ text g
-spacingFactor spacing (g:gn:gs)
+widthSpacingFactor :: Glyph g => Double -> [g] -> T.Text
+widthSpacingFactor _ [] = T.empty
+widthSpacingFactor _ (g:[]) = fromMaybe T.empty $ text g
+widthSpacingFactor spacing (g:gn:gs)
   | dist > spacing * (width g) = T.append (fromMaybe T.empty $ text g) $
                                   T.append (T.pack " ") $
-                                  spacingFactor spacing (gn:gs)
+                                  widthSpacingFactor spacing (gn:gs)
   | otherwise = T.append (fromMaybe T.empty $ text g) $
-                spacingFactor spacing (gn:gs)
+                widthSpacingFactor spacing (gn:gs)
     where
       dist = abs((xLeft g) - (xLeft gn))
 
