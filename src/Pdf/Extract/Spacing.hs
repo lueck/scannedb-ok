@@ -33,56 +33,31 @@ import System.IO
 import Pdf.Extract.Glyph
 
 
--- * Rule-based insertion of inter-word spaces
-
--- | Insert spaces on the basis of the size of a glyph. If the
--- distance to the next glyph exceeds the product of the size and a
--- spacing factor, insert a space. In Antiqua scripts (english print)
--- a space was traditionally (at least) a third of the size of a
--- letter. So 1/3 is a good factor to start with.
-sizeSpacingFactor :: Glyph g => Double -> [g] -> T.Text
-sizeSpacingFactor _ [] = T.empty
-sizeSpacingFactor _ (g:[]) = fromMaybe T.empty $ text g
-sizeSpacingFactor spacing (g:gn:gs)
-  | dist > spacing * (size g) = T.append (fromMaybe T.empty $ text g) $
-                                T.append (T.pack " ") $
-                                sizeSpacingFactor spacing (gn:gs)
-  | otherwise = T.append (fromMaybe T.empty $ text g) $
-                sizeSpacingFactor spacing (gn:gs)
-    where
-      dist = abs((xLeft gn) - (width g) - (xLeft g))
-
-
--- | Insert spaces on the basis of the width of a glyph. If the
--- distance to the next glyph exceeds the product of the width and a
--- spacing factor, insert a space.
-widthSpacingFactor :: Glyph g => Double -> [g] -> T.Text
-widthSpacingFactor _ [] = T.empty
-widthSpacingFactor _ (g:[]) = fromMaybe T.empty $ text g
-widthSpacingFactor spacing (g:gn:gs)
-  | dist > spacing * (width g) = T.append (fromMaybe T.empty $ text g) $
-                                  T.append (T.pack " ") $
-                                  widthSpacingFactor spacing (gn:gs)
-  | otherwise = T.append (fromMaybe T.empty $ text g) $
-                widthSpacingFactor spacing (gn:gs)
-    where
-      dist = abs((xLeft g) - (xLeft gn))
-
-
 -- * Representation of spaces
 
--- | For training the inter-word-spacing ANN, the characters of a line
--- must be represented without the spaces. Therefore each character is
--- wrapped in a 'LeftSpacing' record. This wrapping is done by the
--- 'representSpacesAfter' function. The resulting list can easily be
--- parallelized with the list of glyphs for the line.
+-- | Every algorithm for inserting inter-word spaces is considered as
+-- a classification algorithm: Each 'Glyph' or 'Char' (or whatever) of
+-- a line must be classified either as an item with a space after it,
+-- a space before it, spaces around it or as not spaced at all. We use
+-- a parametric algebraic data type, `LeftSpacing`, for representing
+-- these spacing classes by simply wrapping a glyph or character
+-- according to one of these spacing classes.
 --
--- The record is generic an can be reused to represent spaces between
--- 'Glyph's, too.
-
--- | A wrapper for representing spaces. Actually only 'SpaceAfter' and
--- 'NoSpace' is used, the others are for making it conceptionally
--- complete.
+-- We also use 'LeftSpacing' for representing spaces in training and
+-- validation data. We can use plain text files with manually verified
+-- spaces as training data and transform this plain text into a
+-- representation of inter-word spacing using `LeftSpacing`. There are
+-- no spaces from the input left in the output characters that are
+-- wrapped into 'LeftSpacing'. See 'representSpacesAfter' for such a
+-- transformation.
+--
+-- 'LeftSpacing' is an instance of the functor type class. This
+-- enables us to simply use standard 'fmap' to access all the glyph
+-- information after space insertion. So in the end, we are free to
+-- stack modularized extraction algorithms in whatever order we want.
+--
+-- Actually only 'SpaceAfter' and 'NoSpace' is used, the others are
+-- there for making a conceptionally complete set.
 data LeftSpacing a
   = SpaceBefore a               -- ^ Represents a character or 'Glyph'
                                 -- with a space before it.
@@ -95,13 +70,79 @@ data LeftSpacing a
                                 -- it.
   deriving (Show, Eq)
 
+instance Functor LeftSpacing where
+  fmap f (SpaceBefore a) = SpaceBefore (f a)
+  fmap f (SpaceAfter a) = SpaceAfter (f a)
+  fmap f (SpaceAround a) = SpaceAround (f a)
+  fmap f (NoSpace a) = NoSpace (f a)
+
+
 -- | Unwrap a 'LeftSpacing' item.
+--
+-- Consider using `fmap` instead.
 withoutSpace :: LeftSpacing a -> a
 withoutSpace (SpaceBefore a) = a
 withoutSpace (SpaceAfter a) = a
 withoutSpace (NoSpace a) = a
 
--- | Represent training data.
+
+-- | Linearize left spacing text to text.
+leftSpacingToText :: [LeftSpacing T.Text] -> T.Text
+leftSpacingToText [] = ""
+leftSpacingToText ((NoSpace a):xs) = a <> (leftSpacingToText xs)
+leftSpacingToText ((SpaceAfter a):xs) = a <> " " <> (leftSpacingToText xs)
+leftSpacingToText ((SpaceBefore a):xs) = " " <> a <> (leftSpacingToText xs)
+
+
+-- | Linearize a line of 'Glyph's to 'T.Text' after space insertion.
+leftSpacingGlyphsToText :: Glyph g =>
+                           T.Text -- ^ missing text value in glyph data
+                        -> [LeftSpacing g]
+                        -> T.Text
+leftSpacingGlyphsToText missing =
+  leftSpacingToText . (map (fmap (fromMaybe missing . text)))
+
+
+-- * Rule-based insertion of inter-word spaces
+
+-- | Insert spaces on the basis of the size of a glyph. If the
+-- distance to the next glyph exceeds the product of the size and a
+-- spacing factor, insert a space. In Antiqua scripts (english print)
+-- a space was traditionally (at least) a third of the size of a
+-- letter. So 1/3 is a good factor to start with.
+sizeSpacingFactor :: Glyph g => Double -> [g] -> [LeftSpacing g]
+sizeSpacingFactor _ [] = []
+sizeSpacingFactor _ (g:[]) = [NoSpace g]
+sizeSpacingFactor spacing (g:gn:gs)
+  | dist > spacing * (size g)
+  = (SpaceAfter g) : sizeSpacingFactor spacing (gn:gs)
+  | otherwise
+  = (NoSpace g) : sizeSpacingFactor spacing (gn:gs)
+  where
+    dist = abs((xLeft gn) - (width g) - (xLeft g))
+
+
+-- | Insert spaces on the basis of the width of a glyph. If the
+-- distance to the next glyph exceeds the product of the width and a
+-- spacing factor, insert a space.
+widthSpacingFactor :: Glyph g => Double -> [g] -> [LeftSpacing g]
+widthSpacingFactor _ [] = []
+widthSpacingFactor _ (g:[]) = [NoSpace g]
+widthSpacingFactor spacing (g:gn:gs)
+  | dist > spacing * (width g)
+  = (SpaceAfter g) : widthSpacingFactor spacing (gn:gs)
+  | otherwise
+  = (NoSpace g) : widthSpacingFactor spacing (gn:gs)
+  where
+    dist = abs((xLeft g) - (xLeft gn))
+
+
+-- * Artificial neural network for inserting inter-word spaces
+
+-- | Represent training and validation data. This reads a text
+-- (`String`) and wraps every character into the `LeftSpacing`
+-- functor. Spaces from input string are removed from the output list,
+-- but are represented by the functor.
 representSpacesAfter :: [Char] -> [LeftSpacing Char]
 representSpacesAfter [] = []
 representSpacesAfter (x:[])
@@ -113,22 +154,6 @@ representSpacesAfter (x:x2:xs)
   | otherwise = (NoSpace x) : (representSpacesAfter (x2:xs))
 
 
--- | Linearize to 'LeftSpacing' to 'String'.
-leftSpacingToString :: [LeftSpacing Char] -> [Char]
-leftSpacingToString [] = []
-leftSpacingToString ((NoSpace a):xs) = a : (leftSpacingToString xs)
-leftSpacingToString ((SpaceAfter a):xs) = a : ' ' : (leftSpacingToString xs)
-leftSpacingToString ((SpaceBefore a):xs) = ' ' : a : (leftSpacingToString xs)
-
-
--- | Linearize to 'LeftSpacing' to 'T.Text'.
-leftSpacingToText :: [LeftSpacing T.Text] -> T.Text
-leftSpacingToText [] = ""
-leftSpacingToText ((NoSpace a):xs) = a <> (leftSpacingToText xs)
-leftSpacingToText ((SpaceAfter a):xs) = a <> " " <> (leftSpacingToText xs)
-leftSpacingToText ((SpaceBefore a):xs) = " " <> a <> (leftSpacingToText xs)
-
-
 -- | Helper function for cleaning plain text for training.
 cleanForSpaceTraining :: T.Text -> [T.Text]
 cleanForSpaceTraining =
@@ -137,9 +162,6 @@ cleanForSpaceTraining =
   filter (/=(T.pack [chr 12])) . -- remove lines containing form feed
                                  -- only, e.g. last line
   T.lines                        -- split into lines
-
-
--- * Artificial neural network for inserting inter-word spaces
 
 
 -- | Generate a data vector from a 'Glyph'.
@@ -408,15 +430,11 @@ runSpacingNetOnLine
   :: (Glyph g) =>
      SpacingNet
   -> [g]
-  -> Either String T.Text
+  -> Either String [LeftSpacing g]
 runSpacingNetOnLine network glyphs =
-  fmap (leftSpacingToText .
-        (map (uncurry (runSpacingNet network))) .
-        (zip glyphsTxt)) $
+  fmap ((map (uncurry (runSpacingNet network))) .
+        (zip glyphs)) $
   mkRunningShapes22 glyphs
-  where
-    glyphsTxt = map ((fromMaybe missingGlyph) . text) glyphs
-    missingGlyph = "_"
 
 
 -- | Run the trained network on input data.

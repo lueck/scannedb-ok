@@ -587,19 +587,25 @@ parseRanges pages = do
 -- * Get the space insertion mechanism
 
 -- | This returns a function for inserting inter-word spaces.
-getSpaceInserter :: Glyph g => SpaceInsertion -> IO ([g] -> T.Text)
+getSpaceInserter :: Glyph g => SpaceInsertion -> IO ([g] -> Either String [LeftSpacing g])
 getSpaceInserter (WidthSpacingFactor fac) = do
-  -- hPutStrLn stderr "Rule-based insertion spaces based on glyph widths."
-  return (widthSpacingFactor fac)
+  -- hPutStrLn stderr "Rule-based insertion of inter-word spaces based on glyph widths."
+  return (Right . widthSpacingFactor fac)
 getSpaceInserter (SizeSpacingFactor fac) = do
-  -- hPutStrLn stderr "Rule-based insertion spaces based on font sizes."
-  return (sizeSpacingFactor fac)
+  -- hPutStrLn stderr "Rule-based insertion of inter-word spaces based on font sizes."
+  return (Right . sizeSpacingFactor fac)
 getSpaceInserter (ANNSpacing netFile) = do
   c <- B.readFile netFile
   trained :: SpacingNet <- reportErrors $ runGet get c
   hPutStrLn stderr ("Parsed ANN: " ++ (filter (/='\n') $ show trained))
-  let fun = (either (T.pack . (++"ERROR: ")) id) . (runSpacingNetOnLine trained)
+  let fun = runSpacingNetOnLine trained
   return fun
+
+
+-- | Linearize line of glyphs from spacing algorithm or error message.
+toSpacedText :: Glyph g => Either String [LeftSpacing g] -> T.Text
+toSpacedText (Left err) = "ERROR: " <> T.pack err
+toSpacedText (Right glyphs) = leftSpacingGlyphsToText T.empty glyphs
 
 
 -- * Run the program
@@ -620,16 +626,16 @@ run :: ExtractionCommand -> IO ()
 run (ExtractText PdfInput ranges lineOpts spacing lineCategorizer' nlp' inFile) = do
   pages <- getPdfGlyphs ranges inFile
   spaceFun <- getSpaceInserter spacing
-  extractText lineOpts spaceFun (nlpOutput nlp' lineCategorizer') pages
+  extractText lineOpts (toSpacedText . spaceFun) (nlpOutput nlp' lineCategorizer') pages
 run (ExtractText PdfMinerXml ranges lineOpts spacing lineCategorizer' nlp' inFile) = do
   pages <- getPdfMinerGlyphs ranges inFile
   spaceFun <- getSpaceInserter spacing
-  extractText lineOpts spaceFun (nlpOutput nlp' lineCategorizer') pages
+  extractText lineOpts (toSpacedText . spaceFun) (nlpOutput nlp' lineCategorizer') pages
 
 run (ExtractWords inMeth ranges lineOpts spacing lineCategorizer' nlp' inFile) = do
   pages <- getGlyphs inMeth ranges inFile
   spaceFun <- getSpaceInserter spacing
-  extractWords lineOpts spaceFun (nlpOutput nlp' lineCategorizer') pages
+  extractWords lineOpts (toSpacedText . spaceFun) (nlpOutput nlp' lineCategorizer') pages
 
 run (NoSpaces inMeth ranges lineOpts inFile) = do
   pages <- getGlyphs inMeth ranges inFile
