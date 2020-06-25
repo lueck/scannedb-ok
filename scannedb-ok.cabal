@@ -4,7 +4,7 @@ cabal-version: 2.2
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 7e30f38bb4dec7bbf6f7a59a47eb88a0441cbe52e507dc9ba8772ba7aac5e941
+-- hash: a6faf721b772df0b0f1e132f2fa3f1e776847bd1a9b6f496e924cfe127c7aae5
 
 name:           scannedb-ok
 version:        0.0.2.1
@@ -28,6 +28,7 @@ source-repository head
 
 library
   exposed-modules:
+      Pdf.Extract.Block
       Pdf.Extract.Clustering
       Pdf.Extract.Glyph
       Pdf.Extract.Linearize
@@ -36,6 +37,7 @@ library
       Pdf.Extract.PyPdfMiner
       Pdf.Extract.Spacing
       Pdf.Extract.Syllable
+      Pdf.Extract.Utils
   other-modules:
       Paths_scannedb_ok
   hs-source-dirs:
@@ -53,6 +55,7 @@ library
     , pdf-toolbox-core
     , pdf-toolbox-document ==0.1.*
     , range
+    , regex-tdfa
     , split
     , text
     , unordered-containers
@@ -84,6 +87,7 @@ executable scannedb-ok
     , pdf-toolbox-core
     , pdf-toolbox-document ==0.1.*
     , range
+    , regex-tdfa
     , scannedb-ok
     , split
     , text
@@ -100,6 +104,7 @@ test-suite scannedb-ok-test
       Test.Pdf.Extract.PyPdfMiner
       Test.Pdf.Extract.Spacing
       Test.Pdf.Extract.Syllable
+      Test.Pdf.Extract.Utils
       Paths_scannedb_ok
   hs-source-dirs:
       test
@@ -119,6 +124,7 @@ test-suite scannedb-ok-test
     , pdf-toolbox-core
     , pdf-toolbox-document ==0.1.*
     , range
+    , regex-tdfa
     , scannedb-ok
     , split
     , text

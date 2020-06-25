@@ -39,6 +39,7 @@ dependencies:
 - grenade
 - MonadRandom
 - hmatrix >= 0.18 && < 0.21
+- regex-tdfa
 
 
 library:

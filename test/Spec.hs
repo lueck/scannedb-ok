@@ -7,5 +7,6 @@ import {-@ HTF_TESTS @-} Test.Pdf.Extract.Syllable
 import {-@ HTF_TESTS @-} Test.Pdf.Extract.PyPdfMiner
 import {-@ HTF_TESTS @-} Test.Pdf.Extract.Lines
 import {-@ HTF_TESTS @-} Test.Pdf.Extract.Spacing
+import {-@ HTF_TESTS @-} Test.Pdf.Extract.Utils
 
 main = htfMain htf_importedTests
