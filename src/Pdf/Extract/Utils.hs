@@ -2,6 +2,7 @@
 module Pdf.Extract.Utils
   ( longestSubstringWith
   , longestRomanNumber
+  , foldlWithNext
   ) where
 
 -- | This module contains helper functions.
@@ -10,8 +11,15 @@ import qualified Data.Text as T
 import Text.Regex.TDFA
 
 
--- | Get the length of the longest substring that matches a predicate
--- function.
+-- | Left fold with look ahead to next element.
+foldlWithNext :: (a -> b -> Maybe b -> a) -> a -> [b] -> a
+foldlWithNext _ z [] = z
+foldlWithNext f z (x:[]) = f z x Nothing
+foldlWithNext f z (x:xn:xs) = let z' = f z x (Just xn)
+                              in foldlWithNext f z' (xn:xs)
+
+
+-- | Get the length of the longest substring that matches a predicate.
 longestSubstringWith :: (Char -> Bool) -> T.Text -> Int
 longestSubstringWith p =
   maximum . (0:) . map T.length . T.words . T.map (\c -> if p c then c else ' ')
