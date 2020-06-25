@@ -71,7 +71,7 @@ newtype Glyph g => BlockCategorizer g a = BlockCategorizer
   -> Maybe [[a]]           -- ^ next page (look ahead)
   -> [BlockCategory [a]]   -- ^ categorized lines from before (accumulator)
   -> [a]                   -- ^ the current line
-  -> Maybe [a]             -- ^ next line and number (look ahead)
+  -> [[a]]                 -- ^ rest of lines of page (look ahead)
   -> [BlockCategory [a]])
 
 -- | Categorize lines of multiple pages.
@@ -85,7 +85,7 @@ blocksOfDoc :: Glyph g =>
             -> [[[a]]]              -- ^ list of pages
             -> [[BlockCategory [a]]]
 blocksOfDoc f getGlyph pages =
-  foldlWithNext (blocksOfPage f getGlyph (docFeatures getGlyph pages)) [] pages
+  foldlWithNext' (blocksOfPage f getGlyph (docFeatures getGlyph pages)) [] pages
 
 -- | Categorize lines of single page.
 blocksOfPage :: Glyph g =>
@@ -97,7 +97,7 @@ blocksOfPage :: Glyph g =>
              -> Maybe [[a]]           -- ^ next page
              -> [[BlockCategory [a]]]
 blocksOfPage (BlockCategorizer f) getGlyph doc done lines nextpage =
-  (foldlWithNext (f getGlyph doc (pageFeatures getGlyph lines) done nextpage) [] lines):done
+  (foldlWithRest' (f getGlyph doc (pageFeatures getGlyph lines) done nextpage) [] lines):done
 
 
 -- * Feature extraction
@@ -143,7 +143,7 @@ defaultBlock
   -> Maybe [[a]]           -- ^ next page
   -> [BlockCategory [a]]   -- ^ categorized lines from before
   -> [a]                   -- ^ the line
-  -> Maybe [a]             -- ^ next line
+  -> [[a]]                 -- ^ lines after
   -> [BlockCategory [a]]
 defaultBlock _ _ _ _ _ before line _ = (DefaultBlock line):before
 
@@ -165,9 +165,9 @@ blockByIndent
   -> Maybe [[a]]           -- ^ next page
   -> [BlockCategory [a]]   -- ^ categorized lines from before
   -> [a]                   -- ^ the line
-  -> Maybe [a]             -- ^ next line
+  -> [[a]]                 -- ^ lines after
   -> [BlockCategory [a]]
-blockByIndent opts getGlyph doc page pagesBefore nextPage linesBefore line nextline =
+blockByIndent opts getGlyph doc page pagesBefore nextPage linesBefore line linesAfter =
   (DefaultBlock line) : linesBefore
   where
     lineNum = 1 + length linesBefore

@@ -3,6 +3,9 @@ module Pdf.Extract.Utils
   ( longestSubstringWith
   , longestRomanNumber
   , foldlWithNext
+  , foldlWithNext'
+  , foldlWithRest
+  , foldlWithRest'
   ) where
 
 -- | This module contains helper functions.
@@ -17,6 +20,25 @@ foldlWithNext _ z [] = z
 foldlWithNext f z (x:[]) = f z x Nothing
 foldlWithNext f z (x:xn:xs) = let z' = f z x (Just xn)
                               in foldlWithNext f z' (xn:xs)
+
+-- | Left fold with look ahead to next element.
+foldlWithNext' :: (a -> b -> Maybe b -> a) -> a -> [b] -> a
+foldlWithNext' _ z [] = z
+foldlWithNext' f z (x:[]) = f z x Nothing
+foldlWithNext' f z (x:xn:xs) = let z' = f z x (Just xn)
+                               in seq z' $ foldlWithNext' f z' (xn:xs)
+
+-- | Left fold with look ahead to rest of the list.
+foldlWithRest :: (a -> b -> [b] -> a) -> a -> [b] -> a
+foldlWithRest _ z [] = z
+foldlWithRest f z (x:xs) = let z' = f z x xs
+                           in foldlWithRest f z' xs
+
+-- | Left fold with look ahead to rest of the list.
+foldlWithRest' :: (a -> b -> [b] -> a) -> a -> [b] -> a
+foldlWithRest' _ z [] = z
+foldlWithRest' f z (x:xs) = let z' = f z x xs
+                            in seq z' $ foldlWithRest' f z' xs
 
 
 -- | Get the length of the longest substring that matches a predicate.
