@@ -15,6 +15,14 @@ test_representSpacingAfterDog = do
     [NoSpace 'T',NoSpace 'h',SpaceAfter 'e',NoSpace 'q',NoSpace 'u',NoSpace 'i',NoSpace 'c',SpaceAfter 'k',NoSpace 'b',NoSpace 'r',NoSpace 'o',NoSpace 'w',SpaceAfter 'n',NoSpace 'f',NoSpace 'o',SpaceAfter 'x',NoSpace 'j',NoSpace 'u',NoSpace 'm',NoSpace 'p',SpaceAfter 's',NoSpace 'o',NoSpace 'v',NoSpace 'e',SpaceAfter 'r',NoSpace 't',NoSpace 'h',SpaceAfter 'e',NoSpace 'l',NoSpace 'a',NoSpace 'z',SpaceAfter 'y',NoSpace 'd',NoSpace 'o',NoSpace 'g',NoSpace '.']
     (representSpacesAfter "The quick brown fox jumps over the lazy dog.")
 
+-- | Linearize to 'LeftSpacing' to 'String'.
+leftSpacingToString :: [LeftSpacing Char] -> [Char]
+leftSpacingToString [] = []
+leftSpacingToString ((NoSpace a):xs) = a : (leftSpacingToString xs)
+leftSpacingToString ((SpaceAfter a):xs) = a : ' ' : (leftSpacingToString xs)
+leftSpacingToString ((SpaceBefore a):xs) = ' ' : a : (leftSpacingToString xs)
+
+
 test_leftSpacingToString = do
   assertEqual
     "The quick brown fox jumps over the lazy dog."
