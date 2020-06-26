@@ -31,6 +31,7 @@ import qualified Numeric.LinearAlgebra.Static as SA
 import System.IO
 
 import Pdf.Extract.Glyph
+import Pdf.Extract.Linearize
 
 
 -- * Representation of spaces
@@ -76,6 +77,12 @@ instance Functor LeftSpacing where
   fmap f (SpaceAround a) = SpaceAround (f a)
   fmap f (NoSpace a) = NoSpace (f a)
 
+instance Linearizable a => Linearizable (LeftSpacing a) where
+  linearize (NoSpace a) = linearizeWithoutState (const ("","")) a
+  linearize (SpaceBefore a) = linearizeWithoutState (const (" ","")) a
+  linearize (SpaceAfter a) = linearizeWithoutState (const (""," ")) a
+  linearize (SpaceAround a) = linearizeWithoutState (const (" "," ")) a
+
 
 -- | Unwrap a 'LeftSpacing' item.
 --
@@ -84,7 +91,6 @@ withoutSpace :: LeftSpacing a -> a
 withoutSpace (SpaceBefore a) = a
 withoutSpace (SpaceAfter a) = a
 withoutSpace (NoSpace a) = a
-
 
 -- | Linearize left spacing text to text.
 leftSpacingToText :: [LeftSpacing T.Text] -> T.Text

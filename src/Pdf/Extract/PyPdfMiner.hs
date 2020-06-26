@@ -22,7 +22,7 @@ import Text.Read (readMaybe)
 import qualified Data.Range.Range as R
 
 import qualified Pdf.Extract.Glyph as Gl
-
+import Pdf.Extract.Linearize (Linearizable, linearize, linearizeGlyph)
 
 data PdfMinerGlyph = PdfMinerGlyph
   { _pmg_text :: Maybe T.Text
@@ -38,6 +38,10 @@ instance Gl.Glyph PdfMinerGlyph where
   font = Just . C.unpack . _pmg_font
   xLeft = Gl._bbox_xBottomLeft . _pmg_bbox
   yBottom = Gl._bbox_yBottomLeft . _pmg_bbox
+
+
+instance Linearizable PdfMinerGlyph where
+  linearize g = linearizeGlyph g
 
 
 data PdfMinerState = PdfMinerState
