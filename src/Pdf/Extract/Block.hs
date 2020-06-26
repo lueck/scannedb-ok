@@ -7,10 +7,13 @@ module Pdf.Extract.Block where
 -- an abstraction from western scripts. Here, it is used for lines as
 -- a whole, in contrast to inline-level portions of a line.
 
+import qualified Data.Text as T
+import Data.Char
+import Data.Maybe
 
 import Pdf.Extract.Glyph
 import Pdf.Extract.Utils
-import Pdf.Extract.Linearize hiding (LineCategory(..))
+import Pdf.Extract.Linearize hiding (LineCategory(..), ByIndentOpts(..))
 import Pdf.Extract.Clustering
 
 
@@ -72,7 +75,7 @@ instance Linearizable a => Linearizable (BlockCategory a) where
 -- insertion of inter-word spaces has been processed before. In this
 -- case 'withoutSpace' would be a way to access the glyph and keep the
 -- spacing intact.
-newtype Glyph g => BlockCategorizer g a = BlockCategorizer
+type BlockCategorizer g a =
   ((a -> g)                -- ^ glyph accessor function, e.g. 'id'
   -> DocFeatures           -- ^ overall features of the document
   -> PageFeatures          -- ^ overall features of the page
@@ -87,7 +90,7 @@ newtype Glyph g => BlockCategorizer g a = BlockCategorizer
 --
 -- Usage:
 --
--- @blocksOfDoc (BlockCategorizer (yourCategorizerFunction options)) pages@
+-- @blocksOfDoc (yourCategorizerFunction options) pages@
 blocksOfDoc :: Glyph g =>
                BlockCategorizer g a -- ^ categorizer function
             -> (a -> g)             -- ^ glyph accessor, e.g. 'id'
@@ -105,7 +108,7 @@ blocksOfPage :: Glyph g =>
              -> [[a]]                 -- ^ lines of page
              -> Maybe [[a]]           -- ^ next page
              -> [[BlockCategory [a]]]
-blocksOfPage (BlockCategorizer f) getGlyph doc done lines nextpage =
+blocksOfPage f getGlyph doc done lines nextpage =
   (foldlWithRest' (f getGlyph doc (pageFeatures getGlyph lines) done nextpage) [] lines):done
 
 
@@ -148,6 +151,7 @@ data PageFeatures = PageFeatures
   , pfRightBorderLowerBound :: Double
   , pfRightBorderUpperBound :: Double
   , pfLinesAtRightBorder :: Int
+  , pfLineWidth :: Double
   , pfRightBorderClusters :: [[Double]]
   , pfGlyphSizeLowerBound :: Double
   , pfGlyphSizeUpperBound :: Double
@@ -162,7 +166,7 @@ pageFeatures :: Glyph g =>
 pageFeatures getGlyph lines = PageFeatures
   { pfLinesCount = length lines
   , pfMaxGlyphs = mostGlyphs
-  , pfLeftBorderLowerBound = foldl min leftBorderUpperBound leftBorderCluster
+  , pfLeftBorderLowerBound = leftBorderLowerBound
   , pfLeftBorderUpperBound = leftBorderUpperBound
   , pfLinesAtLeftBorder = leftBorderSize
   , pfLeftBorderClusters = leftBorderClusters
@@ -170,12 +174,13 @@ pageFeatures getGlyph lines = PageFeatures
   , pfRightBorderUpperBound = rightBorderUpperBound
   , pfLinesAtRightBorder = rightBorderSize
   , pfRightBorderClusters = rightBorderClusters
+  , pfLineWidth = rightBorderUpperBound - leftBorderLowerBound
   , pfGlyphSizeLowerBound = glyphSizeUpperBound
   , pfGlyphSizeUpperBound = glyphSizeLowerBound
   , pfGlyphSizeClusters = glyphSizeClusters
   }
   where
-    lineTuples = mkLineTuples getGlyph lines
+    lineTuples = map (mkLineTuple getGlyph) lines
     getLeft (l, _, _, _) = l
     getRight (_, r, _, _) = r
     getSize (_, _, s, _) = s
@@ -192,6 +197,7 @@ pageFeatures getGlyph lines = PageFeatures
                          map getLeft lineTuples
     (leftBorderSize, leftBorderCluster) = longest' leftBorderClusters
     leftBorderUpperBound = foldl max 0 leftBorderCluster
+    leftBorderLowerBound = foldl min leftBorderUpperBound leftBorderCluster
     -- Right Border:
     rightBorderClusters = slidingWindow1D (4 * mostGlyphs) 0 False id 0 mostRight $
                           map getRight lineTuples
@@ -205,10 +211,10 @@ pageFeatures getGlyph lines = PageFeatures
     glyphSizeUpperBound = foldl max 0 glyphSizeCluster
     glyphSizeLowerBound = foldl min glyphSizeUpperBound glyphSizeCluster
 
--- | Map glyphs of a page to a feature tuple.
-mkLineTuples :: Glyph g => (a -> g) -> [[a]] -> [(Double, Double, Double, Int)]
-mkLineTuples getGlyph =
-  map (foldl accGlyphs (1000, 0, 0, 0) . map (glyphTriple . getGlyph))
+-- | Map glyphs of a line to a feature tuple.
+mkLineTuple :: Glyph g => (a -> g) -> [a] -> (Double, Double, Double, Int)
+mkLineTuple getGlyph =
+  foldl accGlyphs (1000, 0, 0, 0) . map (glyphTriple . getGlyph)
 
 glyphTriple :: Glyph g => g -> (Double, Double, Double)
 glyphTriple = (,,) <$> xLeft <*> xRight <*> size
@@ -232,7 +238,7 @@ accGlyphs (left, right, size, count) (l, r, s) =
 --
 -- Usage for a whole document:
 --
--- @blocksOfDoc (BlockCategorizer defaultBlock) pages@
+-- @blocksOfDoc defaultBlock pages@
 defaultBlock
   :: Glyph g =>
      (a -> g)              -- ^ glyph accessor function, e.g. 'id'
@@ -253,7 +259,7 @@ defaultBlock _ _ _ _ _ before line _ = (DefaultBlock line):before
 -- 'blockByIndent' categorizes a single line. Usage for a whole
 -- document:
 --
--- @blocksOfDoc (BlockCategorizer (blockByIndent options)) id pages@
+-- @blocksOfDoc (blockByIndent options) id pages@
 blockByIndent
   :: Glyph g =>
      ByIndentOpts          -- ^ user-defined options
@@ -266,11 +272,64 @@ blockByIndent
   -> [a]                   -- ^ the line
   -> [[a]]                 -- ^ lines after
   -> [BlockCategory [a]]
-blockByIndent opts getGlyph doc page pagesBefore nextPage linesBefore line linesAfter =
-  (DefaultBlock line) : linesBefore
+blockByIndent opts getGlyph doc page pagesBefore nextPage linesBefore line linesAfter
+  | (count == 1) &&
+    containsNumbersP =
+    -- TODO: head skip exceeds baseline skip
+    (Headline line):linesBefore
+  | (count == lastLine) &&
+    indent > custInd * pageWidth &&
+    -- we also use custInd for a filling criterion:
+    (lineFill < (custFill * maxLineFill)) =
+    (Custos line):linesBefore
+  | (count == lastLine) &&
+    indent > (_byInd_sigInd opts) * pageWidth &&
+    (lineFill < (_byInd_sigFill opts * maxLineFill)) =
+    (SheetSignature line):linesBefore
+  | (count == lastLine) &&
+    containsNumbersP =
+    -- TODO: foot skip exceeds baseline skip
+    (Footline line):linesBefore
+  | (_byInd_parseQuote opts) &&
+    -- TODO: definitively more context needed
+    indent > 0 &&
+    size < (pfGlyphSizeLowerBound page) =
+    (BlockQuote line):linesBefore
+  | indent > 0 =
+    (FirstOfParagraph line):linesBefore
+  | otherwise =
+    (DefaultBlock line):linesBefore
   where
-    lineNum = 1 + length linesBefore
+    count = 1 + length linesBefore
+    glyphs' = map getGlyph line
+    glyphs = if _byInd_dropMargin opts
+             then filter inTypeArea glyphs'
+             else glyphs'
+    lineText = T.concat $ mapMaybe text glyphs
+    containsNumbersP = 0 < longestSubstringWith isNumber lineText ||
+                       0 < longestRomanNumber lineText
+    inTypeArea = (\g -> (xLeft g >= pfLeftBorderLowerBound page) &&
+                        (xRight g <= pfRightBorderUpperBound page))
+    (left, right, size, glyphsInLine) = mkLineTuple id glyphs
+    indent = left - pfLeftBorderUpperBound page
+    pageWidth = pfLineWidth page
+    custFill = 1.2 - custInd -- 1 + 0.2 for secure matching
+    custInd = _byInd_custInd opts
+    lineFill = fromIntegral glyphsInLine
+    maxLineFill = fromIntegral $ pfMaxGlyphs page
+    lastLine = pfLinesCount page
+
+
+-- | Config for 'blockByIndent'.
+data ByIndentOpts = ByIndentOpts
+  { _byInd_parInd :: Double    -- ^ paragraph indent
+  , _byInd_custInd :: Double   -- ^ indent of the custos in partion of the pagewidth
+  , _byInd_sigInd :: Double    -- ^ indent of the sheet signature in partion of the pagewidth
+  , _byInd_sigFill :: Double   -- ^ line filling of the sheet signature
+  , _byInd_parseQuote :: Bool  -- ^ parse for block quotes
+  , _byInd_dropMargin :: Bool  -- ^ drop glyphs outside of the type area
+  }
 
 
 -- categorizeByIndent :: Glyph g => ByIndentOpts -> [[[g]]] -> [[BlockCategory [g]]]
--- categorizeByIndent opts pages = blocksOfDoc (BlockCategorizer (blockByIndent opts)) id pages
+-- categorizeByIndent opts pages = blocksOfDoc (blockByIndent opts) id pages
