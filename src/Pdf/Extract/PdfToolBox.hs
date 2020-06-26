@@ -7,6 +7,8 @@ module Pdf.Extract.PdfToolBox
 
 
 import Pdf.Extract.Glyph
+import Pdf.Extract.Linearize (Linearizable, linearize, linearizeGlyph)
+
 import qualified Pdf.Content.Processor as P
 import Pdf.Content.Transform
 
@@ -41,3 +43,6 @@ x (Vector a _) = a
 
 y :: Vector a -> a
 y (Vector _ b) = b
+
+instance Linearizable P.Glyph where
+  linearize g = linearizeGlyph g

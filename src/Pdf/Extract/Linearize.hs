@@ -1,15 +1,178 @@
 {-# LANGUAGE OverloadedStrings, TemplateHaskell #-}
 module Pdf.Extract.Linearize where
 
--- | Linearize the glyphs of a line
+-- | This module provides functions for linearizing processed
+-- (categorized) data.
 
 import qualified Data.Text as T
+import qualified Data.Text.IO as T
 import Data.List
 import Data.Maybe
 import Control.Lens
+import Control.Monad
+import Control.Monad.State
+import Control.Monad.Reader
+import System.IO
 
 import Pdf.Extract.Glyph
 import Pdf.Extract.Lines
+
+
+-- | A linearizing app can access the configuration and has a state.
+type LinearizationApp a = ReaderT LinearizationOptions (StateT [Maybe LinearizationSymbol] IO) a
+
+
+-- | A class for linearizable types.
+class Linearizable a where
+  linearize :: a -> LinearizationApp ()
+
+
+instance Linearizable a => Linearizable [a] where
+  linearize a = mapM_ linearize a
+
+
+-- | Uniform structure of a config element for the linearization of a
+-- categorized item.
+type LinearizationTuple =
+  ( Bool                      -- ^ whether or not to output at all
+  , T.Text                    -- ^ opening text in output
+  , T.Text                    -- ^ closing text in output
+  , Maybe LinearizationSymbol -- ^ stack symbol to push on stack at opening
+  , Maybe LinearizationSymbol -- ^ stack symbol to pull from stack at closing
+  )
+
+-- | Uniform structure of a config element for the linearization of a
+-- categorized item.
+type StatelessLinearizationTuple =
+  ( T.Text                    -- ^ opening text in output
+  , T.Text                    -- ^ closing text in output
+  )
+
+-- | Linearize (multiply stacked) categorizations.
+linearizeWithState
+  :: Linearizable a =>
+     (LinearizationOptions -> LinearizationTuple) -- ^ access config field
+  -> a                                            -- ^ linearizable inner content
+  -> LinearizationApp ()
+linearizeWithState getOption innerContent = do
+  symStack <- get
+  lOpts <- ask
+  let (display, pre, post, preSym, postSym) = getOption lOpts
+      output = loOutputHandle lOpts
+      mode = loStackMode lOpts
+  case display of
+    False -> do
+      return ()
+    True -> do
+      liftIO $ T.hPutStr output pre
+      if isJust preSym
+        then put (preSym:symStack)
+        else put symStack -- FIXME: do nothing
+      linearize innerContent
+      (lastSym:symStack') <- get
+      case mode of
+        CFG -> do
+          if isJust postSym && lastSym == postSym
+            then put symStack'
+            else fail "Error in linearization"
+        otherwise -> do
+          if isJust postSym && lastSym == postSym
+            then put symStack'
+            else put (lastSym:symStack') -- FIXME: do nothing
+      liftIO $ T.hPutStr output post
+
+-- | Same as 'linearizeWithState', but do not access state. This is
+-- faster for categorizations, that can be linearized without stateful
+-- processing, e.g. spacing.
+linearizeWithoutState
+  :: Linearizable a =>
+     (LinearizationOptions -> StatelessLinearizationTuple)
+  -> a
+  -> LinearizationApp ()
+linearizeWithoutState getOption innerContent = do
+  lOpts <- ask
+  let (pre, post) = getOption lOpts
+      output = loOutputHandle lOpts
+  liftIO $ T.hPutStr output pre
+  linearize innerContent
+  liftIO $ T.hPutStr output post
+
+-- | Same as 'linearizeWithState', but for glyphs where it is neither
+-- necessary to access the state nor pre and post strings.
+linearizeGlyph :: Glyph g => g -> LinearizationApp ()
+linearizeGlyph glyph = do
+  lOpts <- ask
+  let output = loOutputHandle lOpts
+      missing = loMissingGlyphText lOpts
+  liftIO $ T.hPutStr output $ fromMaybe missing $ text glyph
+
+
+-- | Symbols for the linearization stack.
+data LinearizationSymbol
+  = DefaultBlockSymbol
+  | ParagraphSymbol
+  | CustosSymbol
+  | SheetSignatureSymbol
+  | HeadlineSymbol
+  | FootlineSymbol
+  | BlockQuoteSymbol
+  deriving (Eq, Show)
+
+data LinearizationStackMode
+  = CFG   -- ^ output must conform to a context free grammar
+  | Loose -- ^ loose output
+
+-- | A configuration record for the linearization.
+data LinearizationOptions = LinearizationOptions
+  { loOutputHandle :: Handle
+  , loStackMode :: LinearizationStackMode
+  -- glyphs
+  , loMissingGlyphText :: T.Text
+  -- spacing classes
+  -- , loNoSpace :: StatelessLinearizationTuple
+  -- , loSpaceAfter :: StatelessLinearizationTuple
+  -- , loSpaceBefore :: StatelessLinearizationTuple
+  -- , loSpaceAround :: StatelessLinearizationTuple
+  -- block classes
+  , loDefaultBlock :: LinearizationTuple
+  , loFirstOfParagraph :: LinearizationTuple
+  , loCustos :: LinearizationTuple
+  , loSheetSignature :: LinearizationTuple
+  , loHeadline :: LinearizationTuple
+  , loFootline :: LinearizationTuple
+  , loBlockQuote :: LinearizationTuple
+  }
+
+-- | Config for linearization to plain text.
+plaintextLinearizationOptions :: LinearizationOptions
+plaintextLinearizationOptions = LinearizationOptions
+  { loOutputHandle = stdout
+  , loStackMode = Loose
+  , loMissingGlyphText = "?"
+  -- spacing classes
+  -- , loNoSpace = ("", "")
+  -- , loSpaceAfter = ("", " ")
+  -- , loSpaceBefore = (" ", "")
+  -- , loSpaceAround = (" ", " ")
+  -- block classes
+  , loDefaultBlock = (True, "", "\n", Nothing, Nothing)
+  , loFirstOfParagraph = (True, "\t", "\n", Just ParagraphSymbol, Nothing)
+  , loCustos = (False, "\t\t\t", "\n", Just CustosSymbol, Just CustosSymbol)
+  , loSheetSignature = (False, "\t\t\t", "\n", Just SheetSignatureSymbol, Just SheetSignatureSymbol)
+  , loHeadline = (False, "", "\n", Just HeadlineSymbol, Just HeadlineSymbol)
+  , loFootline = (False, "", "\n", Just FootlineSymbol, Just FootlineSymbol)
+  , loBlockQuote = (True, "\t\t", "\n", Just BlockQuoteSymbol, Just BlockQuoteSymbol)
+  }
+
+-- | Turn the output of a category ON.
+outputOn :: LinearizationTuple -> LinearizationTuple
+outputOn (_, pre, post, preSym, postSym) = (True, pre, post, preSym, postSym)
+
+-- | Turn the output of a category OFF.
+outputOff :: LinearizationTuple -> LinearizationTuple
+outputOff (_, pre, post, preSym, postSym) = (False, pre, post, preSym, postSym)
+
+
 
 -- * Categorize Lines
 
