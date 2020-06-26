@@ -10,7 +10,7 @@ module Pdf.Extract.Block where
 
 import Pdf.Extract.Glyph
 import Pdf.Extract.Utils
-import Pdf.Extract.Linearize (ByIndentOpts) -- deprecated
+import Pdf.Extract.Linearize hiding (LineCategory(..))
 import Pdf.Extract.Clustering
 
 
@@ -40,6 +40,15 @@ instance Functor BlockCategory where
   fmap f (Headline a) = Headline (f a)
   fmap f (Footline a) = Footline (f a)
   fmap f (BlockQuote a) = BlockQuote (f a)
+
+instance Linearizable a => Linearizable (BlockCategory a) where
+  linearize (DefaultBlock a) = linearizeWithState loDefaultBlock a
+  linearize (FirstOfParagraph a) = linearizeWithState loFirstOfParagraph a
+  linearize (Custos a) = linearizeWithState loCustos a
+  linearize (SheetSignature a) = linearizeWithState loSheetSignature a
+  linearize (Headline a) = linearizeWithState loHeadline a
+  linearize (Footline a) = linearizeWithState loFootline a
+  linearize (BlockQuote a) = linearizeWithState loBlockQuote a
 
 -- * Calling categorizers
 
