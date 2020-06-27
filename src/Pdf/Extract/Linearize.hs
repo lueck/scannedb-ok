@@ -196,6 +196,12 @@ plaintextLinearizationOptions = LinearizationOptions
   , _lo_PageNumber = (True, "[[", "]]", Just PageNumberSymbol, Just PageNumberSymbol)
   }
 
+simpleLinerizationTuple :: LinearizationTuple
+simpleLinerizationTuple = (True, "", "", Nothing, Nothing)
+
+simpleStatelessLinearizationTuple :: StatelessLinearizationTuple
+simpleStatelessLinearizationTuple = (True, "", "")
+
 -- | Turn the output of a category on or off.
 setOutput :: Bool -> LinearizationTuple -> LinearizationTuple
 setOutput display (_, pre, post, preSym, postSym) = (display, pre, post, preSym, postSym)

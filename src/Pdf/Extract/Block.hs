@@ -13,7 +13,7 @@ import Data.List
 
 import Pdf.Extract.Glyph
 import Pdf.Extract.Utils
-import Pdf.Extract.Linearize hiding (LineCategory(..), ByIndentOpts(..))
+import Pdf.Extract.Linearize
 import Pdf.Extract.Clustering
 import Pdf.Extract.Lines
 
