@@ -42,6 +42,13 @@ instance (Linearizable a, Show b) => Linearizable (Either b a) where
 instance (Linearizable a) => Linearizable (Page a) where
   linearize (_, xs) = linearizeWithState _lo_Page xs
 
+instance Linearizable GlyphType where
+  linearize (MkGlyphType g) = do
+    lOpts <- ask
+    let missing = _lo_MissingGlyphText lOpts
+        output = _lo_OutputHandle lOpts
+    liftIO $ T.hPutStr output $ fromMaybe missing $ text g
+
 
 -- | Uniform structure of a config element for the linearization of a
 -- categorized item.

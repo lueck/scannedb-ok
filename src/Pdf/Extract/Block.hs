@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 module Pdf.Extract.Block where
 
 -- | This module provides categorization classes and categorizers for
@@ -236,6 +235,39 @@ accGlyphs (left, right, size, count) (l, r, s) =
   , max size s
   , count + 1)
 {-# INLINE accGlyphs #-}
+
+-- | Print a list of 'PageFeatures' in the IO monad.
+printPageFeatures :: PageFeatures -> IO ()
+printPageFeatures infos = do
+  putStr "#Lines: "
+  print $ pfLinesCount infos
+  --putStr "Glyphs per Lines: "
+  --print $ map _line_glyphsInLine infos
+  --
+  putStr "Left border (lower bound): "
+  print $ show $ pfLeftBorderLowerBound infos
+  putStr "Left border (upper bound): "
+  print $ show $ pfLeftBorderUpperBound infos
+  putStr "Count of lines starting there: "
+  print $ pfLinesAtLeftBorder infos
+  putStr "Left border clusters: "
+  print $ show $ pfLeftBorderClusters infos
+  -- putStr "Left most glyph of lines: "
+  -- print $ map _line_left infos
+  --
+  putStr "Right border, lines starting there: "
+  print $ show $ pfLinesAtRightBorder infos
+  putStr "Right border (upper bound): "
+  print $ show $ pfRightBorderUpperBound infos
+  putStr "Right border clusters: "
+  print $ show $ pfRightBorderClusters infos
+  --
+  putStr "Glyph Size (lower bound of biggest cluster): "
+  print $ show $ pfGlyphSizeLowerBound infos
+  putStr "Glyph size clusters: "
+  print $ show $ pfGlyphSizeClusters infos
+  -- putStr "Glyph sizes of lines: "
+  -- print $ map _line_glyphSize infos
 
 
 -- * Rule based block categorizers

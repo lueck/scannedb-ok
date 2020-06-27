@@ -677,10 +677,17 @@ run (ExtractText PdfInput ranges lineOpts spacing lineCategorizer nlp' inFile) =
                   pages
   runStateT (runReaderT (linearize processed) linearizationConfig) []
   return ()
--- run (ExtractText PdfMinerXml ranges lineOpts spacing lineCategorizer' nlp' inFile) = do
---   pages <- getPdfMinerGlyphs ranges inFile
---   spaceFun <- getSpaceInserter spacing
---   extractText lineOpts (toSpacedText . spaceFun) (nlpOutput nlp' lineCategorizer') pages
+run (ExtractText PdfMinerXml ranges lineOpts spacing lineCategorizer nlp' inFile) = do
+  pages <- getPdfMinerGlyphs ranges inFile
+  spaceFun <- getSpaceInserter spacing
+  blockFun <- getBlockCategorizer lineCategorizer
+  linearizationConfig <- getLinearizationConfig lineCategorizer
+  let processed = map (pageMap (map (fmap spaceFun))) $ -- insert spaces
+                  blocksOfDoc blockFun id $   -- categorize blocks
+                  map (findLinesWindowOnPage lineOpts) $ -- find lines
+                  pages
+  runStateT (runReaderT (linearize processed) linearizationConfig) []
+  return ()
 
 -- run (ExtractWords inMeth ranges lineOpts spacing lineCategorizer' nlp' inFile) = do
 --   pages <- getGlyphs inMeth ranges inFile
@@ -689,9 +696,11 @@ run (ExtractText PdfInput ranges lineOpts spacing lineCategorizer nlp' inFile) =
 
 run (NoSpaces inMeth ranges lineOpts inFile) = do
   pages <- getGlyphs inMeth ranges inFile
-  forM_ pages (\(page, glyphs) -> do
-                  let lines = findLinesWindow lineOpts glyphs
-                  mapM_ (T.putStrLn . (linearizeLine (T.concat . mapMaybe text))) lines)
+  let linearizationConfig = plaintextLinearizationOptions
+      processed = map (findLinesWindowOnPage lineOpts) -- find lines
+                  pages
+  runStateT (runReaderT (linearize processed) linearizationConfig) []
+  return ()
 
 run (Info inMeth ranges lineOpts inFile) = do
   pages <- getGlyphs inMeth ranges inFile
@@ -705,7 +714,7 @@ run (Info inMeth ranges lineOpts inFile) = do
                   putStr "Bottom: "
                   print $ glyphsBottom glyphs
                   let lines = findLinesWindow lineOpts glyphs
-                  printLineInfo $ genLineInfo lines)
+                  printPageFeatures $ pageFeatures id lines)
 
 run (ExtractGlyphs inMeth ranges lineOpts inFile) = do
   pages <- getGlyphs inMeth ranges inFile
@@ -804,35 +813,6 @@ reportErrors (Left err) = fail err
 --                                dropFoot footlines' $
 --                                findLinesWindow lineOpts glyphs
 --                   mapM T.putStrLn tokens)
-
-
--- extractText :: (Show g, Eq g, Glyph g) =>
---   LineOptions ->                -- ^ count of lines etc.
---   ([g] -> T.Text) ->            -- ^ spacing factor
---   LineCategorizer ->            -- ^ config of line categorizer
---   [(Int, [g])] ->               -- ^ list of tuples of page number and
---                                 -- glyphs on this page
---   IO ()
--- extractText lineOpts spaceFun (ByIndent byIndOpts linOpts sylOpts) pages = do
---   forM_ pages (\(page, glyphs) -> do
---                   let lines = map (linearizeCategorizedLine linOpts spaceFun) $
---                               categorizeLines (byIndent byIndOpts) $
---                               findLinesWindow lineOpts glyphs
---                   linearized <- if (isJust $ tokensFile sylOpts)
---                     then loadTokens (fromMaybe "/dev/null" $ tokensFile sylOpts) >>=
---                          \ws -> repair (flip M.member ws) (markRequired sylOpts) [] lines
---                          -- /dev/null is never loaded, because of if condition
---                     else return lines
---                   mapM T.putStr linearized
---                   -- add form feed at end of page
---                   T.putStr(T.singleton $ chr 12))
--- extractText lineOpts spaceFun (AsDefault headlines' footlines') pages = do
---   forM_ pages (\(page, glyphs) -> do
---                   let lines = findLinesWindow lineOpts glyphs
---                   mapM (T.putStrLn . (linearizeLine spaceFun)) $
---                     (drop headlines') $ dropFoot footlines' lines
---                   T.putStr(T.singleton $ chr 12) -- add form feed at end of page
---                   return ())
 
 
 dropHead :: Glyph g => Int -> [[g]] -> [[g]]
