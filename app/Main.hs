@@ -23,14 +23,18 @@ import Data.Tuple.Extra
 import qualified Data.HashMap.Lazy as M
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 import Grenade
-import Data.Serialize
+import Data.Serialize as S
+import Control.Monad.Reader
+import Control.Monad.State
+import Control.Lens hiding (argument)
 
 import Pdf.Extract.Lines
-import Pdf.Extract.Linearize
+import Pdf.Extract.Linearize hiding (LineCategory(..), ByIndentOpts(..), byIndent)
 import Pdf.Extract.PdfToolBox
 import Pdf.Extract.PyPdfMiner
 import Pdf.Extract.Glyph
 import Pdf.Extract.Spacing
+import Pdf.Extract.Block
 import Pdf.Extract.Syllable
 
 
@@ -385,45 +389,55 @@ lineOpts_ = LineOptions
    <> metavar "STEPS")
 
 
+
+
 -- | Parser for linearization command line options
 linOpts_ :: Parser LinearizationOpts
 linOpts_ = LinOpts
-  <$> ((flag Part3 Part3
-        (long "head-keep-page"
-         <> help "Keep only the page number found in the headline. (Default)"))
-       <|>
-       (flag' Drop3
-        (long "head-drop"
-         <> help "Drop the whole headline."))
-       <|>
-       (flag' Keep3
-        (long "head-keep"
-         <> help "Keep the whole headline.")))
-  <*> ((flag Part3 Part3
-        (long "foot-keep-page"
-         <> help "Keep only the page number found in the footline. (Default)"))
-       <|>
-       (flag' Drop3
-        (long "foot-drop"
-         <> help "Drop the whole footline."))
-       <|>
-       (flag' Keep3
-        (long "foot-keep"
-         <> help "Keep the whole footline.")))
-  <*> ((flag Drop2 Drop2
-        (long "custos-drop"
-         <> help "Drop the custos, i.e. the bottom line which contains the first syllable of the next page. (Default)"))
-       <|>
-       (flag' Keep2
-        (long "custos-keep"
-         <> help "Keep the custos.")))
-  <*> ((flag Drop2 Drop2
-        (long "sig-drop"
-         <> help "Drop the sheet signature in the bottom line. (Default)"))
-       <|>
-       (flag' Keep2
-        (long "sig-keep"
-         <> help "Keep the sheet signature.")))
+  -- <$> ((flag Part3 Part3
+  --       (long "head-keep-page"
+  --        <> help "Keep only the page number found in the headline. (Default)"))
+  --      <|>
+  --      (flag' Drop3
+  --       (long "head-drop"
+  --        <> help "Drop the whole headline."))
+  --      <|>
+  --      (flag' Keep3
+  --       (long "head-keep"
+  --        <> help "Keep the whole headline.")))
+  -- <*> ((flag Part3 Part3
+  --       (long "foot-keep-page"
+  --        <> help "Keep only the page number found in the footline. (Default)"))
+  --      <|>
+  --      (flag' Drop3
+  --       (long "foot-drop"
+  --        <> help "Drop the whole footline."))
+  --      <|>
+  --      (flag' Keep3
+  --       (long "foot-keep"
+  --        <> help "Keep the whole footline.")))
+  -- <*> ((flag Drop2 Drop2
+  --       (long "custos-drop"
+  --        <> help "Drop the custos, i.e. the bottom line which contains the first syllable of the next page. (Default)"))
+  --      <|>
+  --      (flag' Keep2
+  --       (long "custos-keep"
+  --        <> help "Keep the custos.")))
+  -- <*> ((flag Drop2 Drop2
+  --       (long "sig-drop"
+  --        <> help "Drop the sheet signature in the bottom line. (Default)"))
+  --      <|>
+  --      (flag' Keep2
+  --       (long "sig-keep"
+  --        <> help "Keep the sheet signature.")))
+  <$> switch (long "keep-head"
+              <> help "Keep headline.")
+  <*> switch (long "keep-foot"
+              <> help "Keep footline.")
+  <*> switch (long "keep-custos"
+              <> help "Keep the custos, i.e. the bottom line which contains the first syllable of the next page.")
+  <*> switch (long "keep-sheet-signature"
+              <> help "Keep the sheet signature.")
   <*> strOption (long "page-pre"
                  <> help "The prefix for the page number if only the number is kept of a head- or footline."
                  <> value "[["
@@ -596,7 +610,7 @@ getSpaceInserter (SizeSpacingFactor fac) = do
   return (Right . sizeSpacingFactor fac)
 getSpaceInserter (ANNSpacing netFile) = do
   c <- B.readFile netFile
-  trained :: SpacingNet <- reportErrors $ runGet get c
+  trained :: SpacingNet <- reportErrors $ S.runGet S.get c
   hPutStrLn stderr ("Parsed ANN: " ++ (filter (/='\n') $ show trained))
   let fun = runSpacingNetOnLine trained
   return fun
@@ -606,6 +620,35 @@ getSpaceInserter (ANNSpacing netFile) = do
 toSpacedText :: Glyph g => Either String [LeftSpacing g] -> T.Text
 toSpacedText (Left err) = "ERROR: " <> T.pack err
 toSpacedText (Right glyphs) = leftSpacingGlyphsToText T.empty glyphs
+
+
+-- * Get block categorization mechanism
+
+getBlockCategorizer :: Glyph g => LineCategorizer -> IO (BlockCategorizer g a)
+getBlockCategorizer (ByIndent opts _ _) = do
+  return (byIndent opts)
+getBlockCategorizer (AsDefault top bottom) = do
+  return defaultBlock
+
+
+-- * Get linearization config
+
+getLinearizationConfig :: LineCategorizer -> IO LinearizationOptions
+getLinearizationConfig (ByIndent _ opts _) = do
+  return $ plaintextLinearizationOptions
+    & lo_Headline %~ (setOutput $ _linopts_head opts)
+    & lo_Footline %~ (setOutput $ _linopts_foot opts)
+    & lo_Custos %~ ((setOutput $ _linopts_custos opts) .
+                    (setPre $ _linopts_preCustos opts))
+    & lo_SheetSignature %~ ((setOutput $ _linopts_sheetSig opts) .
+                            (setPre $ _linopts_preSheetSig opts))
+    & lo_BlockQuote %~ (setPre $ _linopts_preQuote opts)
+    & lo_FirstOfParagraph %~ (setPre $ _linopts_prePar opts)
+    & lo_Page %~ ((setPre $ _linopts_prePage opts) .
+                  (setPost $ _linopts_postPage opts))
+getLinearizationConfig (AsDefault top bottom) = do
+  return plaintextLinearizationOptions
+
 
 
 -- * Run the program
@@ -623,19 +666,26 @@ main = execParser opts >>= run
 run :: ExtractionCommand -> IO ()
 
 -- for performance reasons we do not use getGlyphs here
-run (ExtractText PdfInput ranges lineOpts spacing lineCategorizer' nlp' inFile) = do
+run (ExtractText PdfInput ranges lineOpts spacing lineCategorizer nlp' inFile) = do
   pages <- getPdfGlyphs ranges inFile
   spaceFun <- getSpaceInserter spacing
-  extractText lineOpts (toSpacedText . spaceFun) (nlpOutput nlp' lineCategorizer') pages
-run (ExtractText PdfMinerXml ranges lineOpts spacing lineCategorizer' nlp' inFile) = do
-  pages <- getPdfMinerGlyphs ranges inFile
-  spaceFun <- getSpaceInserter spacing
-  extractText lineOpts (toSpacedText . spaceFun) (nlpOutput nlp' lineCategorizer') pages
+  blockFun <- getBlockCategorizer lineCategorizer
+  linearizationConfig <- getLinearizationConfig lineCategorizer
+  let processed = map (map (fmap spaceFun)) $ -- insert spaces
+                  blocksOfDoc blockFun id $   -- categorize blocks
+                  map (map (sortOn xLeft) . findLinesWindow lineOpts . snd) -- find lines
+                  pages
+  runStateT (runReaderT (linearize processed) linearizationConfig) []
+  return ()
+-- run (ExtractText PdfMinerXml ranges lineOpts spacing lineCategorizer' nlp' inFile) = do
+--   pages <- getPdfMinerGlyphs ranges inFile
+--   spaceFun <- getSpaceInserter spacing
+--   extractText lineOpts (toSpacedText . spaceFun) (nlpOutput nlp' lineCategorizer') pages
 
-run (ExtractWords inMeth ranges lineOpts spacing lineCategorizer' nlp' inFile) = do
-  pages <- getGlyphs inMeth ranges inFile
-  spaceFun <- getSpaceInserter spacing
-  extractWords lineOpts (toSpacedText . spaceFun) (nlpOutput nlp' lineCategorizer') pages
+-- run (ExtractWords inMeth ranges lineOpts spacing lineCategorizer' nlp' inFile) = do
+--   pages <- getGlyphs inMeth ranges inFile
+--   spaceFun <- getSpaceInserter spacing
+--   extractWords lineOpts (toSpacedText . spaceFun) (nlpOutput nlp' lineCategorizer') pages
 
 run (NoSpaces inMeth ranges lineOpts inFile) = do
   pages <- getGlyphs inMeth ranges inFile
@@ -711,7 +761,7 @@ run (TrainSpacing PdfMinerXml lineOpts iterations rate trainingPdf trainingTxt v
   trained <- foldM (runSpacingIteration stderr (concat td) (concat vd) rate) initialNet [1..iterations]
   hPutStrLn stderr " done (Training)"
   hPutStr stderr $ "Dumping trained network to " ++ netFile ++ " ..."
-  B.writeFile netFile $ runPut $ put trained
+  B.writeFile netFile $ S.runPut $ S.put trained
   hPutStrLn stderr " done"
   -- print td
   -- hPutStrLn stderr "Trained network run on validation data:"
@@ -732,57 +782,57 @@ reportErrors (Left err) = fail err
 
 
 
-extractWords :: (Show g, Eq g, Glyph g) =>
-  LineOptions ->                -- ^ count of lines etc.
-  ([g] -> T.Text) ->            -- ^ space insertion function
-  LineCategorizer ->            -- ^ config of line categorizer
-  [(Int, [g])] ->               -- ^ list of tuples of page number and
-                                -- glyphs on this page
-  IO ()
-extractWords lineOpts spaceFun (ByIndent byIndOpts linOpts sylOpts) pages = do
-  forM_ pages (\(page, glyphs) -> do
-                  let tokens = concatMap (tokenizeMiddle) $
-                               map (linearizeCategorizedLine linOpts spaceFun) $
-                               categorizeLines (byIndent byIndOpts) $
-                               findLinesWindow lineOpts glyphs
-                  mapM T.putStrLn tokens)
-extractWords lineOpts spaceFun (AsDefault headlines' footlines') pages = do
-  forM_ pages (\(page, glyphs) -> do
-                  let tokens = concatMap (tokenizeMiddle) $
-                               map (linearizeLine spaceFun) $
-                               drop headlines' $
-                               dropFoot footlines' $
-                               findLinesWindow lineOpts glyphs
-                  mapM T.putStrLn tokens)
+-- extractWords :: (Show g, Eq g, Glyph g) =>
+--   LineOptions ->                -- ^ count of lines etc.
+--   ([g] -> T.Text) ->            -- ^ space insertion function
+--   LineCategorizer ->            -- ^ config of line categorizer
+--   [(Int, [g])] ->               -- ^ list of tuples of page number and
+--                                 -- glyphs on this page
+--   IO ()
+-- extractWords lineOpts spaceFun (ByIndent byIndOpts linOpts sylOpts) pages = do
+--   forM_ pages (\(page, glyphs) -> do
+--                   let tokens = concatMap (tokenizeMiddle) $
+--                                map (linearizeCategorizedLine linOpts spaceFun) $
+--                                categorizeLines (byIndent byIndOpts) $
+--                                findLinesWindow lineOpts glyphs
+--                   mapM T.putStrLn tokens)
+-- extractWords lineOpts spaceFun (AsDefault headlines' footlines') pages = do
+--   forM_ pages (\(page, glyphs) -> do
+--                   let tokens = concatMap (tokenizeMiddle) $
+--                                map (linearizeLine spaceFun) $
+--                                drop headlines' $
+--                                dropFoot footlines' $
+--                                findLinesWindow lineOpts glyphs
+--                   mapM T.putStrLn tokens)
 
 
-extractText :: (Show g, Eq g, Glyph g) =>
-  LineOptions ->                -- ^ count of lines etc.
-  ([g] -> T.Text) ->            -- ^ spacing factor
-  LineCategorizer ->            -- ^ config of line categorizer
-  [(Int, [g])] ->               -- ^ list of tuples of page number and
-                                -- glyphs on this page
-  IO ()
-extractText lineOpts spaceFun (ByIndent byIndOpts linOpts sylOpts) pages = do
-  forM_ pages (\(page, glyphs) -> do
-                  let lines = map (linearizeCategorizedLine linOpts spaceFun) $
-                              categorizeLines (byIndent byIndOpts) $
-                              findLinesWindow lineOpts glyphs
-                  linearized <- if (isJust $ tokensFile sylOpts)
-                    then loadTokens (fromMaybe "/dev/null" $ tokensFile sylOpts) >>=
-                         \ws -> repair (flip M.member ws) (markRequired sylOpts) [] lines
-                         -- /dev/null is never loaded, because of if condition
-                    else return lines
-                  mapM T.putStr linearized
-                  -- add form feed at end of page
-                  T.putStr(T.singleton $ chr 12))
-extractText lineOpts spaceFun (AsDefault headlines' footlines') pages = do
-  forM_ pages (\(page, glyphs) -> do
-                  let lines = findLinesWindow lineOpts glyphs
-                  mapM (T.putStrLn . (linearizeLine spaceFun)) $
-                    (drop headlines') $ dropFoot footlines' lines
-                  T.putStr(T.singleton $ chr 12) -- add form feed at end of page
-                  return ())
+-- extractText :: (Show g, Eq g, Glyph g) =>
+--   LineOptions ->                -- ^ count of lines etc.
+--   ([g] -> T.Text) ->            -- ^ spacing factor
+--   LineCategorizer ->            -- ^ config of line categorizer
+--   [(Int, [g])] ->               -- ^ list of tuples of page number and
+--                                 -- glyphs on this page
+--   IO ()
+-- extractText lineOpts spaceFun (ByIndent byIndOpts linOpts sylOpts) pages = do
+--   forM_ pages (\(page, glyphs) -> do
+--                   let lines = map (linearizeCategorizedLine linOpts spaceFun) $
+--                               categorizeLines (byIndent byIndOpts) $
+--                               findLinesWindow lineOpts glyphs
+--                   linearized <- if (isJust $ tokensFile sylOpts)
+--                     then loadTokens (fromMaybe "/dev/null" $ tokensFile sylOpts) >>=
+--                          \ws -> repair (flip M.member ws) (markRequired sylOpts) [] lines
+--                          -- /dev/null is never loaded, because of if condition
+--                     else return lines
+--                   mapM T.putStr linearized
+--                   -- add form feed at end of page
+--                   T.putStr(T.singleton $ chr 12))
+-- extractText lineOpts spaceFun (AsDefault headlines' footlines') pages = do
+--   forM_ pages (\(page, glyphs) -> do
+--                   let lines = findLinesWindow lineOpts glyphs
+--                   mapM (T.putStrLn . (linearizeLine spaceFun)) $
+--                     (drop headlines') $ dropFoot footlines' lines
+--                   T.putStr(T.singleton $ chr 12) -- add form feed at end of page
+--                   return ())
 
 
 dropHead :: Glyph g => Int -> [[g]] -> [[g]]

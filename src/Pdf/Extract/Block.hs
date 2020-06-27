@@ -10,6 +10,7 @@ module Pdf.Extract.Block where
 import qualified Data.Text as T
 import Data.Char
 import Data.Maybe
+import Data.List
 
 import Pdf.Extract.Glyph
 import Pdf.Extract.Utils
@@ -45,13 +46,13 @@ instance Functor BlockCategory where
   fmap f (BlockQuote a) = BlockQuote (f a)
 
 instance Linearizable a => Linearizable (BlockCategory a) where
-  linearize (DefaultBlock a) = linearizeWithState loDefaultBlock a
-  linearize (FirstOfParagraph a) = linearizeWithState loFirstOfParagraph a
-  linearize (Custos a) = linearizeWithState loCustos a
-  linearize (SheetSignature a) = linearizeWithState loSheetSignature a
-  linearize (Headline a) = linearizeWithState loHeadline a
-  linearize (Footline a) = linearizeWithState loFootline a
-  linearize (BlockQuote a) = linearizeWithState loBlockQuote a
+  linearize (DefaultBlock a) = linearizeWithState _lo_DefaultBlock a
+  linearize (FirstOfParagraph a) = linearizeWithState _lo_FirstOfParagraph a
+  linearize (Custos a) = linearizeWithState _lo_Custos a
+  linearize (SheetSignature a) = linearizeWithState _lo_SheetSignature a
+  linearize (Headline a) = linearizeWithState _lo_Headline a
+  linearize (Footline a) = linearizeWithState _lo_Footline a
+  linearize (BlockQuote a) = linearizeWithState _lo_BlockQuote a
 
 -- * Calling categorizers
 
@@ -109,7 +110,7 @@ blocksOfPage :: Glyph g =>
              -> Maybe [[a]]           -- ^ next page
              -> [[BlockCategory [a]]]
 blocksOfPage f getGlyph doc done lines nextpage =
-  (foldlWithRest' (f getGlyph doc (pageFeatures getGlyph lines) done nextpage) [] lines):done
+  done ++ [foldlWithRest' (f getGlyph doc (pageFeatures getGlyph lines) done nextpage) [] lines]
 
 
 -- * Feature extraction
@@ -214,7 +215,7 @@ pageFeatures getGlyph lines = PageFeatures
 -- | Map glyphs of a line to a feature tuple.
 mkLineTuple :: Glyph g => (a -> g) -> [a] -> (Double, Double, Double, Int)
 mkLineTuple getGlyph =
-  foldl accGlyphs (1000, 0, 0, 0) . map (glyphTriple . getGlyph)
+  foldl' accGlyphs (1000, 0, 0, 0) . map (glyphTriple . getGlyph)
 
 glyphTriple :: Glyph g => g -> (Double, Double, Double)
 glyphTriple = (,,) <$> xLeft <*> xRight <*> size
@@ -250,17 +251,16 @@ defaultBlock
   -> [a]                   -- ^ the line
   -> [[a]]                 -- ^ lines after
   -> [BlockCategory [a]]
-defaultBlock _ _ _ _ _ before line _ = (DefaultBlock line):before
+defaultBlock _ _ _ _ _ before line _ = before ++ [DefaultBlock line]
 
 
 -- | Categorize blocks by indentation, horizontal filling etc. This is
 -- a rule-based categorization algorithm.
 --
--- 'blockByIndent' categorizes a single line. Usage for a whole
--- document:
+-- 'byIndent' categorizes a single line. Usage for a whole document:
 --
--- @blocksOfDoc (blockByIndent options) id pages@
-blockByIndent
+-- @blocksOfDoc (byIndent options) id pages@
+byIndent
   :: Glyph g =>
      ByIndentOpts          -- ^ user-defined options
   -> (a -> g)              -- ^ glyph accessor function, e.g. 'id'
@@ -272,33 +272,33 @@ blockByIndent
   -> [a]                   -- ^ the line
   -> [[a]]                 -- ^ lines after
   -> [BlockCategory [a]]
-blockByIndent opts getGlyph doc page pagesBefore nextPage linesBefore line linesAfter
+byIndent opts getGlyph doc page pagesBefore nextPage linesBefore line linesAfter
   | (count == 1) &&
     containsNumbersP =
     -- TODO: head skip exceeds baseline skip
-    (Headline line):linesBefore
+    linesBefore ++ [Headline line]
   | (count == lastLine) &&
     indent > custInd * pageWidth &&
     -- we also use custInd for a filling criterion:
     (lineFill < (custFill * maxLineFill)) =
-    (Custos line):linesBefore
+    linesBefore ++ [Custos line]
   | (count == lastLine) &&
     indent > (_byInd_sigInd opts) * pageWidth &&
     (lineFill < (_byInd_sigFill opts * maxLineFill)) =
-    (SheetSignature line):linesBefore
+    linesBefore ++ [SheetSignature line]
   | (count == lastLine) &&
     containsNumbersP =
     -- TODO: foot skip exceeds baseline skip
-    (Footline line):linesBefore
+    linesBefore ++ [Footline line]
   | (_byInd_parseQuote opts) &&
     -- TODO: definitively more context needed
     indent > 0 &&
     size < (pfGlyphSizeLowerBound page) =
-    (BlockQuote line):linesBefore
+    linesBefore ++ [BlockQuote line]
   | indent > 0 =
-    (FirstOfParagraph line):linesBefore
+    linesBefore ++ [FirstOfParagraph line]
   | otherwise =
-    (DefaultBlock line):linesBefore
+    linesBefore ++ [DefaultBlock line]
   where
     count = 1 + length linesBefore
     glyphs' = map getGlyph line
@@ -320,7 +320,7 @@ blockByIndent opts getGlyph doc page pagesBefore nextPage linesBefore line lines
     lastLine = pfLinesCount page
 
 
--- | Config for 'blockByIndent'.
+-- | Config for 'byIndent'.
 data ByIndentOpts = ByIndentOpts
   { _byInd_parInd :: Double    -- ^ paragraph indent
   , _byInd_custInd :: Double   -- ^ indent of the custos in partion of the pagewidth
@@ -332,4 +332,4 @@ data ByIndentOpts = ByIndentOpts
 
 
 -- categorizeByIndent :: Glyph g => ByIndentOpts -> [[[g]]] -> [[BlockCategory [g]]]
--- categorizeByIndent opts pages = blocksOfDoc (blockByIndent opts) id pages
+-- categorizeByIndent opts pages = blocksOfDoc (byIndent opts) id pages

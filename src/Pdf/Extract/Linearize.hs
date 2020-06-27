@@ -13,6 +13,7 @@ import Control.Monad
 import Control.Monad.State
 import Control.Monad.Reader
 import System.IO
+import Control.Lens
 
 import Pdf.Extract.Glyph
 import Pdf.Extract.Lines
@@ -29,6 +30,10 @@ class Linearizable a where
 
 instance Linearizable a => Linearizable [a] where
   linearize a = mapM_ linearize a
+
+instance (Linearizable a, Show b) => Linearizable (Either b a) where
+  linearize (Left err) = liftIO $ fail $ show err
+  linearize (Right a) = linearize a
 
 
 -- | Uniform structure of a config element for the linearization of a
@@ -58,8 +63,10 @@ linearizeWithState getOption innerContent = do
   symStack <- get
   lOpts <- ask
   let (display, pre, post, preSym, postSym) = getOption lOpts
-      output = loOutputHandle lOpts
-      mode = loStackMode lOpts
+      output = _lo_OutputHandle lOpts
+      mode = _lo_StackMode lOpts
+      top [] = Nothing
+      top (x:_) = x
   case display of
     False -> do
       return ()
@@ -69,16 +76,17 @@ linearizeWithState getOption innerContent = do
         then put (preSym:symStack)
         else put symStack -- FIXME: do nothing
       linearize innerContent
-      (lastSym:symStack') <- get
+      symStack' <- get
+      let lastSym = top symStack'
       case mode of
         CFG -> do
           if isJust postSym && lastSym == postSym
-            then put symStack'
+            then put (tail symStack')
             else fail "Error in linearization"
         otherwise -> do
           if isJust postSym && lastSym == postSym
-            then put symStack'
-            else put (lastSym:symStack') -- FIXME: do nothing
+            then put (tail symStack')
+            else put symStack' -- FIXME: do nothing
       liftIO $ T.hPutStr output post
 
 -- | Same as 'linearizeWithState', but do not access state. This is
@@ -92,7 +100,7 @@ linearizeWithoutState
 linearizeWithoutState getOption innerContent = do
   lOpts <- ask
   let (pre, post) = getOption lOpts
-      output = loOutputHandle lOpts
+      output = _lo_OutputHandle lOpts
   liftIO $ T.hPutStr output pre
   linearize innerContent
   liftIO $ T.hPutStr output post
@@ -102,8 +110,8 @@ linearizeWithoutState getOption innerContent = do
 linearizeGlyph :: Glyph g => g -> LinearizationApp ()
 linearizeGlyph glyph = do
   lOpts <- ask
-  let output = loOutputHandle lOpts
-      missing = loMissingGlyphText lOpts
+  let output = _lo_OutputHandle lOpts
+      missing = _lo_MissingGlyphText lOpts
   liftIO $ T.hPutStr output $ fromMaybe missing $ text glyph
 
 
@@ -124,167 +132,76 @@ data LinearizationStackMode
 
 -- | A configuration record for the linearization.
 data LinearizationOptions = LinearizationOptions
-  { loOutputHandle :: Handle
-  , loStackMode :: LinearizationStackMode
+  { _lo_OutputHandle :: Handle
+  , _lo_StackMode :: LinearizationStackMode
   -- glyphs
-  , loMissingGlyphText :: T.Text
+  , _lo_MissingGlyphText :: T.Text
+  -- page
+  , _lo_Page :: LinearizationTuple
   -- spacing classes
-  -- , loNoSpace :: StatelessLinearizationTuple
-  -- , loSpaceAfter :: StatelessLinearizationTuple
-  -- , loSpaceBefore :: StatelessLinearizationTuple
-  -- , loSpaceAround :: StatelessLinearizationTuple
+  -- , _lo_NoSpace :: StatelessLinearizationTuple
+  -- , _lo_SpaceAfter :: StatelessLinearizationTuple
+  -- , _lo_SpaceBefore :: StatelessLinearizationTuple
+  -- , _lo_SpaceAround :: StatelessLinearizationTuple
   -- block classes
-  , loDefaultBlock :: LinearizationTuple
-  , loFirstOfParagraph :: LinearizationTuple
-  , loCustos :: LinearizationTuple
-  , loSheetSignature :: LinearizationTuple
-  , loHeadline :: LinearizationTuple
-  , loFootline :: LinearizationTuple
-  , loBlockQuote :: LinearizationTuple
+  , _lo_DefaultBlock :: LinearizationTuple
+  , _lo_FirstOfParagraph :: LinearizationTuple
+  , _lo_Custos :: LinearizationTuple
+  , _lo_SheetSignature :: LinearizationTuple
+  , _lo_Headline :: LinearizationTuple
+  , _lo_Footline :: LinearizationTuple
+  , _lo_BlockQuote :: LinearizationTuple
   }
+
+makeLenses ''LinearizationOptions
 
 -- | Config for linearization to plain text.
 plaintextLinearizationOptions :: LinearizationOptions
 plaintextLinearizationOptions = LinearizationOptions
-  { loOutputHandle = stdout
-  , loStackMode = Loose
-  , loMissingGlyphText = "?"
+  { _lo_OutputHandle = stdout
+  , _lo_StackMode = Loose
+  , _lo_MissingGlyphText = ""
+  , _lo_Page = (True, "", "\xc", Nothing, Nothing)
   -- spacing classes
-  -- , loNoSpace = ("", "")
-  -- , loSpaceAfter = ("", " ")
-  -- , loSpaceBefore = (" ", "")
-  -- , loSpaceAround = (" ", " ")
+  -- , _lo_NoSpace = ("", "")
+  -- , _lo_SpaceAfter = ("", " ")
+  -- , _lo_SpaceBefore = (" ", "")
+  -- , _lo_SpaceAround = (" ", " ")
   -- block classes
-  , loDefaultBlock = (True, "", "\n", Nothing, Nothing)
-  , loFirstOfParagraph = (True, "\t", "\n", Just ParagraphSymbol, Nothing)
-  , loCustos = (False, "\t\t\t", "\n", Just CustosSymbol, Just CustosSymbol)
-  , loSheetSignature = (False, "\t\t\t", "\n", Just SheetSignatureSymbol, Just SheetSignatureSymbol)
-  , loHeadline = (False, "", "\n", Just HeadlineSymbol, Just HeadlineSymbol)
-  , loFootline = (False, "", "\n", Just FootlineSymbol, Just FootlineSymbol)
-  , loBlockQuote = (True, "\t\t", "\n", Just BlockQuoteSymbol, Just BlockQuoteSymbol)
+  , _lo_DefaultBlock = (True, "", "\n", Nothing, Nothing)
+  , _lo_FirstOfParagraph = (True, "\t", "\n", Just ParagraphSymbol, Nothing)
+  , _lo_Custos = (False, "\t\t\t", "\n", Just CustosSymbol, Just CustosSymbol)
+  , _lo_SheetSignature = (False, "\t\t\t", "\n", Just SheetSignatureSymbol, Just SheetSignatureSymbol)
+  , _lo_Headline = (False, "", "\n", Just HeadlineSymbol, Just HeadlineSymbol)
+  , _lo_Footline = (False, "", "\n", Just FootlineSymbol, Just FootlineSymbol)
+  , _lo_BlockQuote = (True, "\t\t", "\n", Just BlockQuoteSymbol, Just BlockQuoteSymbol)
   }
 
--- | Turn the output of a category ON.
-outputOn :: LinearizationTuple -> LinearizationTuple
-outputOn (_, pre, post, preSym, postSym) = (True, pre, post, preSym, postSym)
+-- | Turn the output of a category on or off.
+setOutput :: Bool -> LinearizationTuple -> LinearizationTuple
+setOutput display (_, pre, post, preSym, postSym) = (display, pre, post, preSym, postSym)
 
--- | Turn the output of a category OFF.
-outputOff :: LinearizationTuple -> LinearizationTuple
-outputOff (_, pre, post, preSym, postSym) = (False, pre, post, preSym, postSym)
+-- | Set prefix of a category.
+setPre :: T.Text -> LinearizationTuple -> LinearizationTuple
+setPre pre (display, _, post, preSym, postSym) = (display, pre, post, preSym, postSym)
 
-
-
--- * Categorize Lines
-
--- | A wrapper for categorizing lines of glyphs.
-data (Glyph g) => LineCategory g
-  = DefaultLine [g]             -- ^ somewhere in the middle of a paragraph
-  | FirstOfParagraph [g]        -- ^ first line of a paragraph
-  | Custos [g]                  -- ^ bottom line with first syllable
-                                -- of next page, cf.
-                                -- https://www.typografie.info/3/wiki.html/k/kustode-r328/
-  | SheetSignature [g]          -- ^ bottom line with sheet a short
-                                -- title and number of the sheet (or
-                                -- custos)
-  | Headline [g]                -- ^ first line of a page that matches
-                                -- some features, e.g. presence of a
-                                -- page number
-  | Footline [g]                -- ^ last line that matches some features
-  | BlockQuote [g]              -- ^ an indented quotation
+-- | Set suffix of a category.
+setPost :: T.Text -> LinearizationTuple -> LinearizationTuple
+setPost post (display, pre, _, preSym, postSym) = (display, pre, post, preSym, postSym)
 
 
-data ByIndentOpts = ByIndentOpts
-  { _byInd_parInd :: Double    -- ^ paragraph indent
-  , _byInd_custInd :: Double   -- ^ indent of the custos in partion of the pagewidth
-  , _byInd_sigInd :: Double    -- ^ indent of the sheet signature in partion of the pagewidth
-  , _byInd_sigFill :: Double   -- ^ line filling of the sheet signature
-  , _byInd_parseQuote :: Bool  -- ^ parse for block quotes
-  , _byInd_dropMargin :: Bool  -- ^ drop glyphs outside of the type area
-  }
-
--- | Categorize lines by applying a categorization function.
-categorizeLines :: Glyph g =>
-                   ([([g], Int, LineData)] -> [LineCategory g])
-                -> [[g]]
-                -> [LineCategory g]
-categorizeLines f lines = f $ zip3 lines [1..] $ genLineInfo lines
-
-
--- | Categorize lines by indent and some other features.
-byIndent :: Glyph g =>
-            ByIndentOpts           -- ^ Options
-         -> [([g], Int, LineData)] -- ^ the lines and line data
-         -> [LineCategory g]
-byIndent _ [] = []
-byIndent opts ((line', count, ldata):ls)
-  | (count == 1) &&
-    (containsNumbers line) =
-    -- TODO: head skip exceeds baseline skip
-    (Headline line):[] ++ byIndent opts ls
-  | (count == lastLine) &&
-    indent > custInd * pageWidth &&
-    -- we also use custInd for a filling criterion:
-    (lineFill < (custFill * maxLineFill)) =
-    (Custos line):[] ++ byIndent opts ls
-  | (count == lastLine) &&
-    indent > (_byInd_sigInd opts) * pageWidth &&
-    (lineFill < (_byInd_sigFill opts * maxLineFill)) =
-    (SheetSignature line):[] ++ byIndent opts ls
-  | (count == lastLine) &&
-    (containsNumbers line) =
-    -- TODO: foot skip exceeds baseline skip
-    (Footline line):[] ++ byIndent opts ls
-  | (_byInd_parseQuote opts) &&
-    -- TODO: definitively more context needed
-    indent > 0 &&
-    (_line_glyphSize ldata) < (_line_glyphSizeLowerBound ldata) =
-    (BlockQuote line):[] ++ byIndent opts ls
-  | indent > 0 =
-    (FirstOfParagraph line):[] ++ byIndent opts ls
-  | otherwise =
-    (DefaultLine line):[] ++ byIndent opts ls
-  where
-    line = if _byInd_dropMargin opts
-           then filter inTypeArea line'
-           else line'
-    inTypeArea = (\g -> (xLeft g >= _line_leftBorderLowerBound ldata) &&
-                        (xRight g <= _line_rightBorderUpperBound ldata))
-    indent = _line_left ldata - _line_leftBorderUpperBound ldata
-    pageWidth = _line_rightBorderUpperBound ldata - _line_leftBorderLowerBound ldata
-    custFill = 1.2 - custInd -- 1 + 0.2 for secure matching
-    custInd = _byInd_custInd opts
-    lineFill = fromIntegral $ _line_glyphsInLine ldata
-    maxLineFill = fromIntegral $ _line_maxGlyphs ldata
-    lastLine = _line_linesOnPage ldata
-
-
--- | Returns True if the given line of glyphs contains at least one number.
-containsNumbers :: Glyph g => [g] -> Bool
-containsNumbers [] = False
-containsNumbers (g:gs)
-  -- | (T.head $ text g) `elem` ['0'..'9'] = True
-  | fromMaybe False $ fmap ((flip elem ['0'..'9']) . T.head) $ text g = True
-  | otherwise = containsNumbers gs
-
-
--- | Treat every line as a line from the middle of a paragraph. Use
--- this if you don't want to categorize the lines at all.
-asDefault :: Glyph g => [([g], Int, LineData)] -> [LineCategory g]
-asDefault [] = []
-asDefault ((line, count, ldata):ls) = (DefaultLine line):[] ++ asDefault ls
-
-
--- * Linearize line.
+-- * Linearization options for the UI
 
 data KeepDrop = Keep2 | Drop2
 
 data KeepDropPart = Keep3 | Drop3 | Part3
 
+-- | User options
 data LinearizationOpts = LinOpts
-  { _linopts_head :: KeepDropPart
-  , _linopts_foot :: KeepDropPart
-  , _linopts_custos :: KeepDrop
-  , _linopts_sheetSig :: KeepDrop
+  { _linopts_head :: Bool -- KeepDropPart
+  , _linopts_foot :: Bool -- KeepDropPart
+  , _linopts_custos :: Bool -- KeepDrop
+  , _linopts_sheetSig :: Bool -- KeepDrop
   , _linopts_prePage :: T.Text
   , _linopts_postPage :: T.Text
   , _linopts_prePar :: T.Text
@@ -298,63 +215,16 @@ makeLenses ''LinearizationOpts
 -- | Convient settings for NLP.
 nlpLike :: LinearizationOpts -> LinearizationOpts
 nlpLike opts = opts
-               -- & linopts_head .~ Part3
-               -- & linopts_foot .~ Part3
-               & linopts_custos .~ Drop2
-               & linopts_sheetSig .~ Drop2
+               & linopts_head .~ False -- Part3
+               & linopts_foot .~ False -- Part3
+               & linopts_custos .~ False -- Drop2
+               & linopts_sheetSig .~ False -- Drop2
                & linopts_prePar .~ "\n"
                & linopts_preSheetSig .~ ""
                & linopts_preQuote .~ ""
 
 
--- | Linearize a categorized line.
---
--- This requires a function for inserting spaces as the first
--- argument.
---
--- Use @(T.concat . mapMaybe (glyphText))@ for no spacing at all.
---
--- Use `spacingFactor` @(spacingFactor 1.8)@ for spacing on the basis
--- of the width of a glyph.
-linearizeCategorizedLine :: Glyph g =>
-  LinearizationOpts ->          -- ^ options
-  ([g] -> T.Text) ->            -- ^ linearization function
-  (LineCategory g) ->           -- ^ categorized lines
-  T.Text
-linearizeCategorizedLine opts f (FirstOfParagraph glyphs) =
-  _linopts_prePar opts  <> linearizeLine f glyphs <> "\n"
-linearizeCategorizedLine opts f (DefaultLine glyphs) =
-  linearizeLine f glyphs <> "\n"
-linearizeCategorizedLine opts f (BlockQuote glyphs) =
-  _linopts_preQuote opts  <> linearizeLine f glyphs <> "\n"
-linearizeCategorizedLine LinOpts{_linopts_custos = Drop2} f (Custos glyphs) = ""
-linearizeCategorizedLine LinOpts{_linopts_custos = Keep2, _linopts_preCustos = pre}
-  f (Custos glyphs) =
-  pre <> linearizeLine f glyphs <> "\n"
-linearizeCategorizedLine LinOpts{_linopts_sheetSig = Drop2} f (SheetSignature glyphs) = ""
-linearizeCategorizedLine LinOpts{_linopts_sheetSig = Keep2, _linopts_preSheetSig = pre}
-  f (SheetSignature glyphs) =
-  pre <> linearizeLine f glyphs <> "\n"
-linearizeCategorizedLine LinOpts{_linopts_head = Drop3} f (Headline glyphs) = ""
-linearizeCategorizedLine LinOpts{_linopts_head = Keep3} f (Headline glyphs) =
-  linearizeLine f glyphs <> "\n"
-linearizeCategorizedLine LinOpts{_linopts_head = Part3,
-                                 _linopts_prePage = pre,
-                                 _linopts_postPage = post}
-  f (Headline glyphs) =
-  -- FIXME: filtering may not be enough, because there might be
-  -- section numbers in the headline
-  pre <> (T.filter (`elem` ['0'..'9']) $ linearizeLine f glyphs) <> post <> " "
-linearizeCategorizedLine LinOpts{_linopts_foot = Drop3} f (Footline glyphs) = ""
-linearizeCategorizedLine LinOpts{_linopts_foot = Keep3} f (Footline glyphs) =
-  linearizeLine f glyphs <> "\n"
-linearizeCategorizedLine LinOpts{_linopts_foot = Part3,
-                                 _linopts_prePage = pre,
-                                 _linopts_postPage = post}
-  f (Footline glyphs) =
-  pre <> (T.filter (`elem` ['0'..'9']) $ linearizeLine f glyphs) <> post <> "\n"
-  -- There must be a newline before form feed, doesn't it?
-
+-- * Deprecated
 
 -- | Linearize the glyphs of a line using a serialization function.
 --
