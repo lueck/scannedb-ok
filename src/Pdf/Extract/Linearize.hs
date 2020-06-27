@@ -1,4 +1,8 @@
-{-# LANGUAGE OverloadedStrings, TemplateHaskell #-}
+{-# LANGUAGE
+OverloadedStrings,
+TemplateHaskell,
+TypeSynonymInstances,
+FlexibleInstances #-}
 module Pdf.Extract.Linearize where
 
 -- | This module provides functions for linearizing processed
@@ -34,6 +38,9 @@ instance Linearizable a => Linearizable [a] where
 instance (Linearizable a, Show b) => Linearizable (Either b a) where
   linearize (Left err) = liftIO $ fail $ show err
   linearize (Right a) = linearize a
+
+instance (Linearizable a) => Linearizable (Page a) where
+  linearize (_, xs) = linearizeWithState _lo_Page xs
 
 
 -- | Uniform structure of a config element for the linearization of a
@@ -124,6 +131,7 @@ data LinearizationSymbol
   | HeadlineSymbol
   | FootlineSymbol
   | BlockQuoteSymbol
+  | PageNumberSymbol
   deriving (Eq, Show)
 
 data LinearizationStackMode
@@ -151,6 +159,8 @@ data LinearizationOptions = LinearizationOptions
   , _lo_Headline :: LinearizationTuple
   , _lo_Footline :: LinearizationTuple
   , _lo_BlockQuote :: LinearizationTuple
+  -- inline classes
+  , _lo_PageNumber :: LinearizationTuple
   }
 
 makeLenses ''LinearizationOptions
@@ -175,6 +185,8 @@ plaintextLinearizationOptions = LinearizationOptions
   , _lo_Headline = (False, "", "\n", Just HeadlineSymbol, Just HeadlineSymbol)
   , _lo_Footline = (False, "", "\n", Just FootlineSymbol, Just FootlineSymbol)
   , _lo_BlockQuote = (True, "\t\t", "\n", Just BlockQuoteSymbol, Just BlockQuoteSymbol)
+  -- inline classes
+  , _lo_PageNumber = (True, "[[", "]]", Just PageNumberSymbol, Just PageNumberSymbol)
   }
 
 -- | Turn the output of a category on or off.

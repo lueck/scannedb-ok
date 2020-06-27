@@ -644,8 +644,8 @@ getLinearizationConfig (ByIndent _ opts _) = do
                             (setPre $ _linopts_preSheetSig opts))
     & lo_BlockQuote %~ (setPre $ _linopts_preQuote opts)
     & lo_FirstOfParagraph %~ (setPre $ _linopts_prePar opts)
-    & lo_Page %~ ((setPre $ _linopts_prePage opts) .
-                  (setPost $ _linopts_postPage opts))
+    & lo_PageNumber %~ ((setPre $ _linopts_prePage opts) .
+                        (setPost $ _linopts_postPage opts))
 getLinearizationConfig (AsDefault top bottom) = do
   return plaintextLinearizationOptions
 
@@ -671,9 +671,9 @@ run (ExtractText PdfInput ranges lineOpts spacing lineCategorizer nlp' inFile) =
   spaceFun <- getSpaceInserter spacing
   blockFun <- getBlockCategorizer lineCategorizer
   linearizationConfig <- getLinearizationConfig lineCategorizer
-  let processed = map (map (fmap spaceFun)) $ -- insert spaces
+  let processed = map (pageMap (map (fmap spaceFun))) $ -- insert spaces
                   blocksOfDoc blockFun id $   -- categorize blocks
-                  map (snd . findLinesWindowOnPage lineOpts) $ -- find lines
+                  map (findLinesWindowOnPage lineOpts) $ -- find lines
                   pages
   runStateT (runReaderT (linearize processed) linearizationConfig) []
   return ()

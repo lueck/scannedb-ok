@@ -16,6 +16,7 @@ import Pdf.Extract.Glyph
 import Pdf.Extract.Utils
 import Pdf.Extract.Linearize hiding (LineCategory(..), ByIndentOpts(..))
 import Pdf.Extract.Clustering
+import Pdf.Extract.Lines
 
 
 -- * Representation of categorized blocks
@@ -80,7 +81,7 @@ type BlockCategorizer g a =
   ((a -> g)                -- ^ glyph accessor function, e.g. 'id'
   -> DocFeatures           -- ^ overall features of the document
   -> PageFeatures          -- ^ overall features of the page
-  -> [[BlockCategory [a]]] -- ^ pages before
+  -> [Page (BlockCategory [a])] -- ^ pages before
   -> Maybe [[a]]           -- ^ next page (look ahead)
   -> [BlockCategory [a]]   -- ^ categorized lines from before (accumulator)
   -> [a]                   -- ^ the current line
@@ -95,22 +96,27 @@ type BlockCategorizer g a =
 blocksOfDoc :: Glyph g =>
                BlockCategorizer g a -- ^ categorizer function
             -> (a -> g)             -- ^ glyph accessor, e.g. 'id'
-            -> [[[a]]]              -- ^ list of pages
-            -> [[BlockCategory [a]]]
+            -> [Page [a]]              -- ^ list of pages
+            -> [Page (BlockCategory [a])]
 blocksOfDoc f getGlyph pages =
-  foldlWithNext' (blocksOfPage f getGlyph (docFeatures getGlyph pages)) [] pages
+  foldlWithNext' (blocksOfPage f getGlyph (docFeatures getGlyph $ map snd pages)) [] pages
 
 -- | Categorize lines of single page.
 blocksOfPage :: Glyph g =>
                 BlockCategorizer g a  -- ^ categorizer function
              -> (a -> g)              -- ^ glyph accessor, e.g. 'id'
              -> DocFeatures           -- ^ global features
-             -> [[BlockCategory [a]]] -- ^ categorized pages from before
-             -> [[a]]                 -- ^ lines of page
-             -> Maybe [[a]]           -- ^ next page
-             -> [[BlockCategory [a]]]
+             -> [Page (BlockCategory [a])] -- ^ categorized pages from before
+             -> Page [a]              -- ^ lines of page
+             -> Maybe (Page [a])      -- ^ next page
+             -> [Page (BlockCategory [a])]
 blocksOfPage f getGlyph doc done lines nextpage =
-  done ++ [foldlWithRest' (f getGlyph doc (pageFeatures getGlyph lines) done nextpage) [] lines]
+  done ++
+  [pageMap
+   (foldlWithRest'
+    (f getGlyph doc (pageFeatures getGlyph $ snd lines) done (fmap snd nextpage))
+    [])
+   lines]
 
 
 -- * Feature extraction
@@ -245,7 +251,7 @@ defaultBlock
      (a -> g)              -- ^ glyph accessor function, e.g. 'id'
   -> DocFeatures           -- ^ overall features of the document
   -> PageFeatures          -- ^ overall features of the page
-  -> [[BlockCategory [a]]] -- ^ pages from before
+  -> [Page (BlockCategory [a])] -- ^ pages from before
   -> Maybe [[a]]           -- ^ next page
   -> [BlockCategory [a]]   -- ^ categorized lines from before
   -> [a]                   -- ^ the line
@@ -266,7 +272,7 @@ byIndent
   -> (a -> g)              -- ^ glyph accessor function, e.g. 'id'
   -> DocFeatures           -- ^ overall features of the document
   -> PageFeatures          -- ^ overall features of the page
-  -> [[BlockCategory [a]]] -- ^ pages from before
+  -> [Page (BlockCategory [a])] -- ^ pages from before
   -> Maybe [[a]]           -- ^ next page
   -> [BlockCategory [a]]   -- ^ categorized lines from before
   -> [a]                   -- ^ the line
