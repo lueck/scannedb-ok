@@ -673,7 +673,7 @@ run (ExtractText PdfInput ranges lineOpts spacing lineCategorizer nlp' inFile) =
   linearizationConfig <- getLinearizationConfig lineCategorizer
   let processed = map (map (fmap spaceFun)) $ -- insert spaces
                   blocksOfDoc blockFun id $   -- categorize blocks
-                  map (map (sortOn xLeft) . findLinesWindow lineOpts . snd) -- find lines
+                  map (snd . findLinesWindowOnPage lineOpts) $ -- find lines
                   pages
   runStateT (runReaderT (linearize processed) linearizationConfig) []
   return ()

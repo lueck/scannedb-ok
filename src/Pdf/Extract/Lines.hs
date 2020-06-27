@@ -58,7 +58,24 @@ glyphsBottom [] = 0
 glyphsBottom gs = foldl1 min $ map yBottom gs
 
 
--- * Information about lines for further parsing.
+-- * Pages
+
+-- | A 'Page' has a number and lines of 'Glyph's or categorized items.
+type Page g = (Int, [g])
+
+
+-- | Run a calculation on the glyphs or already categorized items of a
+-- page.
+pageMap :: ([a] -> [b]) -> Page a -> Page b
+pageMap f = (,) <$> fst <*> f . snd
+
+
+findLinesWindowOnPage :: (Eq g, Glyph g) => LineOptions -> Page g -> Page [g]
+findLinesWindowOnPage opts =
+  pageMap (map (sortOn xLeft) . findLinesWindow opts)
+
+
+-- * DEPRECATED: Information about lines for further parsing.
 
 -- | Record for collecting information about the lines of a page.
 data LineData = LineData
