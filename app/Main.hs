@@ -50,7 +50,9 @@ data ExtractionCommand
   , lineOpts :: LineOptions
   , spaceMethod :: SpaceInsertion
   , lineCategorizer :: LineCategorizer
+  , linearOpts :: LinearizationOpts
   , nlpOut :: Bool
+  , sylRepair :: SyllableRepair
   , inputFile :: String
   }
   | NoSpaces
@@ -83,18 +85,19 @@ data ExtractionCommand
   , lineOpts :: LineOptions
   , spaceMethod :: SpaceInsertion
   , lineCategorizer :: LineCategorizer
+  , linearOpts :: LinearizationOpts
   , nlpOut :: Bool
   , inputFile :: String
   }
   | TrainSpacing
   { inputMethod :: InputMethod
+  , pages :: String
   , lineOpts :: LineOptions
+  , lineCategorizer :: LineCategorizer
   , iterations :: Int
   , learningParameters :: LearningParameters
   , trainingPDF :: FilePath     -- ^ file with glyphs (PDF, XML etc.) for training
   , trainingTxt :: FilePath     -- ^ plaintext file with spaces for training
-  , validationPDF :: FilePath   -- ^ file with glyphs (PDF, XML, etc.) for validation
-  , validationTxt :: FilePath   -- ^ plaintext file with spaces for validation
   , netFile :: FilePath         -- ^ file to dump the trained network in
   }
   | ValidateSpacing
@@ -103,7 +106,6 @@ data ExtractionCommand
   , lineOpts :: LineOptions
   , spaceMethod :: SpaceInsertion
   , lineCategorizer :: LineCategorizer
-  , keepParatexts :: Bool
   , validationTxt :: FilePath   -- ^ plaintext file with spaces for validation
   , inputFile :: String
   }
@@ -122,8 +124,8 @@ data SpaceInsertion
 data LineCategorizer
   = ByIndent
     ByIndentOpts
-    LinearizationOpts
-    SyllableRepair
+    -- LinearizationOpts
+    -- SyllableRepair
   | AsDefault
     Int                         -- ^ count of headlines to drop
     Int                         -- ^ count of footlines to drop
@@ -191,8 +193,9 @@ lineCategorizer_ =
     <> long "by-indent"
     <> help "Categorize lines by their indentation. (Default)")
    <*> byIndentOpts_
-   <*> linOpts_
-   <*> syllableRepair_)
+   -- <*> linOpts_
+   -- <*> syllableRepair_
+  )
   <|>
   ((flag' AsDefault
     (short 'C'
@@ -226,7 +229,9 @@ extractText_ = ExtractText
   <*> lineOpts_
   <*> spaceInsertion_
   <*> lineCategorizer_
+  <*> linOpts_
   <*> nlpOut_
+  <*> syllableRepair_
   <*> argument str (metavar "INFILE"
                     <> help "Path to the input file.")
 
@@ -276,6 +281,7 @@ extractWords_ = ExtractWords
   <*> lineOpts_
   <*> spaceInsertion_
   <*> lineCategorizer_
+  <*> linOpts_
   <*> nlpOut_
   <*> argument str (metavar "INFILE"
                     <> help "Path to the input file.")
@@ -284,7 +290,9 @@ extractWords_ = ExtractWords
 trainSpacing_ :: Parser ExtractionCommand
 trainSpacing_ = TrainSpacing
   <$> inputMethod_
+  <*> pages_
   <*> lineOpts_
+  <*> lineCategorizer_
   <*> option auto (long "iterations"
                    <> help "number of learning iterations"
                    <> value 100
@@ -306,10 +314,6 @@ trainSpacing_ = TrainSpacing
                     <> help "Path to PDF (or XML) with training text.")
   <*> argument str (metavar "TRAININGTEXT"
                     <> help "Path to plaintext with correct spaces which corresponds exactly to TRAININGPDF.")
-  <*> argument str (metavar "VALIDATIONPDF"
-                    <> help "Path to PDF (or XML) with validation text.")
-  <*> argument str (metavar "VALIDATIONTEXT"
-                    <> help "Path to plaintext with correct spaces which corresponds exactly to VALIDATIONPDF.")
   <*> argument str (metavar "NETFILE"
                     <> help "Path to the file where to dump the trained network in. The file will be in a binary format, so \".dat\" is a reasonable suffix.")
 
@@ -322,8 +326,6 @@ validateSpacing_ = ValidateSpacing
   <*> lineOpts_
   <*> spaceInsertion_
   <*> lineCategorizer_
-  <*> switch (long "keep-head-foot"
-              <> help "Keep headline, footline, sheetsignature and other paratexts. These are dropped by default.")
   <*> argument str (metavar "VALIDATIONTEXT"
                     <> help "Path to plaintext with correct spaces which corresponds exactly to the read portion of the INFILE.")
   <*> argument str (metavar "INFILE"
@@ -561,11 +563,9 @@ syllableRepair_ = SylRepair
   --  <> hidden)
 
 
-nlpOutput :: Bool -> LineCategorizer -> LineCategorizer
+nlpOutput :: Bool -> LinearizationOpts -> LinearizationOpts
 nlpOutput False o = o
-nlpOutput True (ByIndent byIndOpts linOpts sylOpts) =
-  ByIndent byIndOpts (nlpLike linOpts) sylOpts
-nlpOutput True o = o
+nlpOutput True o = nlpLike o
 
 
 -- * Read PDF or XML input
@@ -662,7 +662,7 @@ toSpacedText (Right glyphs) = leftSpacingGlyphsToText T.empty glyphs
 -- * Get block categorization mechanism
 
 getBlockCategorizer :: Glyph g => LineCategorizer -> IO (BlockCategorizer g a)
-getBlockCategorizer (ByIndent opts _ _) = do
+getBlockCategorizer (ByIndent opts) = do
   return (byIndent opts)
 getBlockCategorizer (AsDefault top bottom) = do
   return defaultBlock
@@ -670,8 +670,8 @@ getBlockCategorizer (AsDefault top bottom) = do
 
 -- * Get linearization config
 
-getLinearizationConfig :: LineCategorizer -> IO LinearizationOptions
-getLinearizationConfig (ByIndent _ opts _) = do
+getLinearizationConfig :: LineCategorizer -> LinearizationOpts -> IO LinearizationOptions
+getLinearizationConfig (ByIndent _) opts = do
   return $ plaintextLinearizationOptions
     & lo_Headline %~ (setOutput $ _linopts_head opts)
     & lo_Footline %~ (setOutput $ _linopts_foot opts)
@@ -683,7 +683,7 @@ getLinearizationConfig (ByIndent _ opts _) = do
     & lo_FirstOfParagraph %~ (setPre $ _linopts_prePar opts)
     & lo_PageNumber %~ ((setPre $ _linopts_prePage opts) .
                         (setPost $ _linopts_postPage opts))
-getLinearizationConfig (AsDefault top bottom) = do
+getLinearizationConfig (AsDefault top bottom) _ = do
   return plaintextLinearizationOptions
 
 
@@ -703,22 +703,22 @@ main = execParser opts >>= run
 run :: ExtractionCommand -> IO ()
 
 -- for performance reasons we do not use getGlyphs here
-run (ExtractText PdfInput ranges lineOpts spacing lineCategorizer nlp' inFile) = do
+run (ExtractText PdfInput ranges lineOpts spacing lineCategorizer linearOpts nlp wp inFile) = do
   pages <- getPdfGlyphs ranges inFile
   spaceFun <- getSpaceInserter spacing
   blockFun <- getBlockCategorizer lineCategorizer
-  linearizationConfig <- getLinearizationConfig lineCategorizer
+  linearizationConfig <- getLinearizationConfig lineCategorizer (nlpOutput nlp linearOpts)
   let processed = map (pageMap (map (fmap spaceFun))) $ -- insert spaces
                   blocksOfDoc blockFun id $   -- categorize blocks
                   map (findLinesWindowOnPage lineOpts) $ -- find lines
                   pages
   runStateT (runReaderT (linearize processed) linearizationConfig) []
   return ()
-run (ExtractText PdfMinerXml ranges lineOpts spacing lineCategorizer nlp' inFile) = do
+run (ExtractText PdfMinerXml ranges lineOpts spacing lineCategorizer linearOpts nlp wp inFile) = do
   pages <- getPdfMinerGlyphs ranges inFile
   spaceFun <- getSpaceInserter spacing
   blockFun <- getBlockCategorizer lineCategorizer
-  linearizationConfig <- getLinearizationConfig lineCategorizer
+  linearizationConfig <- getLinearizationConfig lineCategorizer (nlpOutput nlp linearOpts)
   let processed = map (pageMap (map (fmap spaceFun))) $ -- insert spaces
                   blocksOfDoc blockFun id $   -- categorize blocks
                   map (findLinesWindowOnPage lineOpts) $ -- find lines
@@ -784,53 +784,46 @@ run (SpacingStats inMeth ranges lineOpts inFile) = do
         , (width g2)
         , (size g2)):(spacingsInLine p l (g2:gs))
 
-run (TrainSpacing inMeth lineOpts iterations rate trainingPdf trainingTxt validationPdf validationTxt netFile) = do
-  let ranges = "*"
+run (TrainSpacing inMeth ranges lineOpts lineCat iterations rate trainingPdf trainingTxt netFile) = do
   spaced <- T.readFile trainingTxt
   pages <- getGlyphs inMeth ranges trainingPdf
-  validationSpaced <- T.readFile validationTxt
-  validationPages <- getGlyphs inMeth ranges validationPdf
-  let glyphs = map snd pages
-      validationGlyphs = map snd validationPages
-      glyphLines = map (findLinesWindow lineOpts) glyphs
+  blockFun :: (BlockCategorizer GlyphType GlyphType) <- getBlockCategorizer lineCat
+  let glyphLines =
+        map unwrapBlock $         -- drop block info
+        filter keepBlock $        -- filter blocks
+        concat $                  -- join page and line levels
+        map snd $                 -- drop page numbers
+        blocksOfDoc blockFun id $ -- categorize blocks
+        map (findLinesWindowOnPage lineOpts) $ -- find lines
+        pages
       txtLines = cleanForSpaceTraining spaced
-      linesByLines = zip txtLines (concat glyphLines)
-      validationGlyphLines = map (findLinesWindow lineOpts) validationGlyphs
-      validationTxtLines = cleanForSpaceTraining validationSpaced
-      validationLinesByLines = zip validationTxtLines (concat validationGlyphLines)
-  hPutStr stderr "Verifying training data..."
+      linesByLines = zip txtLines glyphLines
+  hPutStr stderr "# Verifying training data..."
   td <- mapM reportErrors $ map (uncurry mkTrainingShapes22) linesByLines
   hPutStrLn stderr " done"
-  hPutStr stderr "Verifying validation data..."
-  vd <- mapM reportErrors $ map (uncurry mkTrainingShapes22) validationLinesByLines
-  hPutStrLn stderr " done"
-  hPutStrLn stderr "Training..."
+  hPutStrLn stderr "# Training..."
   initialNet <- randomSpacingNet
-  trained <- foldM (runSpacingIteration stderr (concat td) (concat vd) rate) initialNet [1..iterations]
-  hPutStrLn stderr " done (Training)"
-  hPutStr stderr $ "Dumping trained network to " ++ netFile ++ " ..."
+  trained <- foldM (runSpacingIteration stderr (concat td) Nothing rate) initialNet [1..iterations]
+  -- hPutStrLn stderr " done (Training)"
+  hPutStr stderr $ "# Dumping trained network to " ++ netFile ++ " ..."
   B.writeFile netFile $ S.runPut $ S.put trained
   hPutStrLn stderr " done"
-  -- print td
-  -- hPutStrLn stderr "Trained network run on validation data:"
-  -- mapM_ (\gs -> do
-  --           l <- reportErrors $ runSpacingNetOnLine trained gs
-  --           T.putStrLn l) (concat validationGlyphLines)
 
-run (ValidateSpacing inMeth ranges lineOpts spacing lineCategorizer keep txtFile inFile) = do
+run (ValidateSpacing inMeth ranges lineOpts spacing lineCategorizer txtFile inFile) = do
   pages <- getGlyphs inMeth ranges inFile
   spaceFun :: ([GlyphType] -> Either String [LeftSpacing GlyphType]) <-
     getSpaceInserter spacing
   blockFun <- getBlockCategorizer lineCategorizer
-  linearizationConfig <- getLinearizationConfig lineCategorizer
+  -- linearizationConfig <- getLinearizationConfig lineCategorizer
   validationSpaced <- T.readFile txtFile
-  let blockLines = map unwrapBlock $         -- drop block info
-                   filter ((||) <$> const keep <*> keepBlock) $ -- filter blocks
-                   concat $                  -- join page and line levels
-                   map snd $                 -- drop page numbers
-                   blocksOfDoc blockFun id $ -- categorize blocks
-                   map (findLinesWindowOnPage lineOpts) $ -- find lines
-                   pages
+  let blockLines =
+        map unwrapBlock $         -- drop block info
+        filter keepBlock $        -- filter blocks
+        concat $                  -- join page and line levels
+        map snd $                 -- drop page numbers
+        blocksOfDoc blockFun id $ -- categorize blocks
+        map (findLinesWindowOnPage lineOpts) $ -- find lines
+        pages
       validationLines = map (representSpacesAfter .
                              T.unpack) $
                         cleanForSpaceTraining validationSpaced
@@ -858,10 +851,6 @@ run (ValidateSpacing inMeth ranges lineOpts spacing lineCategorizer keep txtFile
     ) $
     zip (concat $ rights processed) (concat $ map (map leftSpacingToLabel) validationLines)
   where
-    keepBlock (DefaultBlock a) = True
-    keepBlock (FirstOfParagraph a) = True
-    keepBlock (BlockQuote a) = True
-    keepBlock _ = False
     csvOptions = Csv.defaultEncodeOptions {
       Csv.encIncludeHeader = True
       }
@@ -877,6 +866,12 @@ run _ = do
 reportErrors :: Either String a -> IO a
 reportErrors (Right r) = return r
 reportErrors (Left err) = fail err
+
+keepBlock :: BlockCategory a -> Bool
+keepBlock (DefaultBlock a) = True
+keepBlock (FirstOfParagraph a) = True
+keepBlock (BlockQuote a) = True
+keepBlock _ = False
 
 
 

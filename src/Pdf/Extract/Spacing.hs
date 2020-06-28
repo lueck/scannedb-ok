@@ -29,9 +29,11 @@ import Control.Monad.Random
 import Numeric.LinearAlgebra ( maxIndex )
 import qualified Numeric.LinearAlgebra.Static as SA
 import System.IO
+import qualified Data.ByteString.Lazy.Char8 as C8
 
 import Pdf.Extract.Glyph
 import Pdf.Extract.Linearize
+import Pdf.Extract.Precision
 
 
 -- * Representation of spaces
@@ -407,7 +409,7 @@ randomSpacingNet = randomNetwork
 runSpacingIteration
   :: Handle                     -- ^ a file handle for logging
   -> [SpacingRow]               -- ^ training data
-  -> [SpacingRow]               -- ^ testing data
+  -> Maybe [SpacingRow]         -- ^ validation data (or Nothing)
   -> LearningParameters         -- ^ learning rate
   -> SpacingNet                 -- ^ the current network
   -> Int                        -- ^ iteration number
@@ -417,39 +419,27 @@ runSpacingIteration log trainRows validateRows rate net i = do
       tRes = fmap (\(rowP,rowL) -> (rowL,) $ runNet trained' rowP) trainRows
       tRes' = fmap (\(S1D label, S1D prediction) -> ( maxIndex (SA.extract label)
                                                     , maxIndex (SA.extract prediction))) tRes
-      vRes = fmap (\(rowP,rowL) -> (rowL,) $ runNet trained' rowP) validateRows
-      vRes' = fmap (\(S1D label, S1D prediction) -> ( maxIndex (SA.extract label)
-                                                    , maxIndex (SA.extract prediction))) vRes
-  hPutStrLn log $ "Iteration " ++ show i ++ ": " ++
-    "\nTraining data: " ++
-    show (length (filter ((==) <$> fst <*> snd) tRes')) ++ " of " ++ show (length tRes') ++
-    "\n " ++ spacingPrecision tRes' ++
-    "\nValidation data: " ++
-    show (length (filter ((==) <$> fst <*> snd) vRes')) ++ " of " ++ show (length vRes') ++
-    "\n " ++ spacingPrecision vRes' ++
-    "\n"
+      vRes = fmap (fmap (\(rowP,rowL) -> (rowL,) $ runNet trained' rowP)) validateRows
+      vRes' = fmap (fmap (\(S1D label, S1D prediction) ->
+                            ( maxIndex (SA.extract label)
+                            , maxIndex (SA.extract prediction)))) vRes
+  C8.putStr $
+    Csv.encode $ (:[]) $
+    (precisionLabel 1 tRes'
+     & prec_goldStandard .~ (Just "training data")
+     & prec_method .~ (Just "2pre2post"))
+  case vRes' of
+    Nothing -> do
+      return ()
+    Just res -> do
+      C8.putStr $
+        Csv.encode $ (:[]) $
+        (precisionLabel 1 res
+         & prec_goldStandard .~ (Just "validation data")
+         & prec_method .~ (Just "2pre2post"))
   return trained'
   where
     trainEach rate' !network (i, o) = train rate' network i o
-
-
--- | Calculate precision and recall of a labeling result. The first
--- element in the tuples should be the result of the labeling process,
--- the second the value of the gold standard. Both must be integers
--- from the one-hot encoding of the labels.
-spacingPrecision :: (Ord b, Num b) => [(b, b)] -> String
-spacingPrecision res =
-  "false positives: " ++ show falsePos ++
-  ", false negatives: " ++ show falseNegs ++
-  ", precision: " ++ show precision ++
-  ", recall: " ++ show recall
-  where
-    truePos = length $ filter ((&&) <$> (==1) . fst <*> (==1) . snd) res
-    falsePos = length $ filter ((<) <$> fst <*> snd) res
-    trueNegs = length $ filter ((&&) <$> (==0) . fst <*> (==0) . snd) res
-    falseNegs = length $ filter ((>) <$> fst <*> snd) res
-    precision = (fromIntegral truePos) / (fromIntegral $ truePos + falsePos)
-    recall = (fromIntegral truePos) / (fromIntegral $ truePos + falseNegs)
 
 
 -- | Run the trained network a line of 'Glyph's. The glyphs should be
