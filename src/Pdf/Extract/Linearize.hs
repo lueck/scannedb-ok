@@ -200,7 +200,7 @@ simpleLinerizationTuple :: LinearizationTuple
 simpleLinerizationTuple = (True, "", "", Nothing, Nothing)
 
 simpleStatelessLinearizationTuple :: StatelessLinearizationTuple
-simpleStatelessLinearizationTuple = (True, "", "")
+simpleStatelessLinearizationTuple = ("", "")
 
 -- | Turn the output of a category on or off.
 setOutput :: Bool -> LinearizationTuple -> LinearizationTuple

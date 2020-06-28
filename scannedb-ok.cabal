@@ -4,10 +4,10 @@ cabal-version: 2.2
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: a6faf721b772df0b0f1e132f2fa3f1e776847bd1a9b6f496e924cfe127c7aae5
+-- hash: fd7b4fd74b42a307afd3f88965fab22a98600134935dd04f5beb62adb2409f73
 
 name:           scannedb-ok
-version:        0.0.2.1
+version:        0.0.3.0
 synopsis:       Text extraction from PDF, specially from scanned books
 description:    Please see the README on GitHub at <https://github.com/lueck/scannedb-ok#readme>
 homepage:       https://github.com/lueck/scannedb-ok#readme
@@ -34,6 +34,7 @@ library
       Pdf.Extract.Linearize
       Pdf.Extract.Lines
       Pdf.Extract.PdfToolBox
+      Pdf.Extract.Precision
       Pdf.Extract.PyPdfMiner
       Pdf.Extract.Spacing
       Pdf.Extract.Syllable

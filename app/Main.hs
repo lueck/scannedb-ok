@@ -7,6 +7,7 @@ import Options.Applicative
 import Data.Monoid ((<>))
 import Data.Char
 import Data.List
+import Data.Either
 import System.Environment
 import qualified Pdf.Document as P
 import qualified Pdf.Content.Processor as P
@@ -36,6 +37,7 @@ import Pdf.Extract.Glyph
 import Pdf.Extract.Spacing
 import Pdf.Extract.Block
 import Pdf.Extract.Syllable
+import Pdf.Extract.Precision
 
 
 -- * Parsing command line arguments
@@ -95,6 +97,17 @@ data ExtractionCommand
   , validationTxt :: FilePath   -- ^ plaintext file with spaces for validation
   , netFile :: FilePath         -- ^ file to dump the trained network in
   }
+  | ValidateSpacing
+  { inputMethod :: InputMethod
+  , pages :: String
+  , lineOpts :: LineOptions
+  , spaceMethod :: SpaceInsertion
+  , lineCategorizer :: LineCategorizer
+  , keepParatexts :: Bool
+  , validationTxt :: FilePath   -- ^ plaintext file with spaces for validation
+  , inputFile :: String
+  }
+
 
 -- | A record for the input type command line argument 
 data InputMethod = PdfInput | PdfMinerXml
@@ -301,6 +314,22 @@ trainSpacing_ = TrainSpacing
                     <> help "Path to the file where to dump the trained network in. The file will be in a binary format, so \".dat\" is a reasonable suffix.")
 
 
+-- | A parser for the __validateSpacing__ command and its arguments.
+validateSpacing_ :: Parser ExtractionCommand
+validateSpacing_ = ValidateSpacing
+  <$> inputMethod_
+  <*> pages_
+  <*> lineOpts_
+  <*> spaceInsertion_
+  <*> lineCategorizer_
+  <*> switch (long "keep-head-foot"
+              <> help "Keep headline, footline, sheetsignature and other paratexts. These are dropped by default.")
+  <*> argument str (metavar "VALIDATIONTEXT"
+                    <> help "Path to plaintext with correct spaces which corresponds exactly to the read portion of the INFILE.")
+  <*> argument str (metavar "INFILE"
+                    <> help "Path to the input file.")
+
+
 formatHint :: String
 formatHint = "\n\nTake care of the parentheses, square brackets and pipes in the usage note. Parentheses group options together, the pipe divides (groups of options) into alternatives. Square brackets mean that the option is optional. "
 
@@ -359,6 +388,14 @@ command_ = subparser
      (fullDesc
       <> progDesc "scannedb-ok glyphs  shows information about the glyphs found in the document."
       <> header "scannedb-ok glyphs - Show information about the glyphs found in the document."))
+  --
+  <>
+  command "validateSpacing"
+   (info
+    (helper <*> validateSpacing_)
+    (fullDesc
+     <> progDesc "scannedb-ok validateSpaces   validates inter-word space insertion by on of scannedb-ok's algorithms against a gold standard given in a plain text file. Precision and recall are calculated and returned to the user."
+     <> header "scannedb-ok validateSpaces - validate inter-word space insertion against a gold standard." ))
   )
 
 
@@ -777,6 +814,58 @@ run (TrainSpacing PdfMinerXml lineOpts iterations rate trainingPdf trainingTxt v
   -- mapM_ (\gs -> do
   --           l <- reportErrors $ runSpacingNetOnLine trained gs
   --           T.putStrLn l) (concat validationGlyphLines)
+
+run (ValidateSpacing inMeth ranges lineOpts spacing lineCategorizer keep txtFile inFile) = do
+  pages <- getGlyphs inMeth ranges inFile
+  spaceFun :: ([GlyphType] -> Either String [LeftSpacing GlyphType]) <-
+    getSpaceInserter spacing
+  blockFun <- getBlockCategorizer lineCategorizer
+  linearizationConfig <- getLinearizationConfig lineCategorizer
+  validationSpaced <- T.readFile txtFile
+  let blockLines = map unwrapBlock $         -- drop block info
+                   filter ((||) <$> const keep <*> keepBlock) $ -- filter blocks
+                   concat $                  -- join page and line levels
+                   map snd $                 -- drop page numbers
+                   blocksOfDoc blockFun id $ -- categorize blocks
+                   map (findLinesWindowOnPage lineOpts) $ -- find lines
+                   pages
+      validationLines = map (representSpacesAfter .
+                             T.unpack) $
+                        cleanForSpaceTraining validationSpaced
+      processed = map (fmap (map leftSpacingToLabel) . spaceFun) blockLines -- insert spaces
+  case (lefts processed) of
+    [] -> return ()
+    _ -> fail $ "ERROR: while inserting inter-word spaces:\n" ++
+         (intercalate "\n" $ lefts processed)
+  mapM_ (\(glyphs, gold) -> do
+            case validateSameText glyphs gold of
+              True -> do
+                return ()
+              False -> do
+                fail $ "ERROR: input data does not match gold standard\n" ++
+                  (T.unpack $ T.concat $ map (fromMaybe "" . text) glyphs) ++
+                  "\n" ++
+                  (map withoutSpace gold)
+        ) $ zip blockLines validationLines
+  C.putStr $
+    Csv.encodeWith csvOptions $ (:[]) $
+    (\d -> precisionLabel 1 d
+           & prec_inputData .~ (Just inFile)
+           & prec_goldStandard .~ (Just txtFile)
+           & prec_method .~ (Just $ spacingMeta spacing)
+    ) $
+    zip (concat $ rights processed) (concat $ map (map leftSpacingToLabel) validationLines)
+  where
+    keepBlock (DefaultBlock a) = True
+    keepBlock (FirstOfParagraph a) = True
+    keepBlock (BlockQuote a) = True
+    keepBlock _ = False
+    csvOptions = Csv.defaultEncodeOptions {
+      Csv.encIncludeHeader = True
+      }
+    spacingMeta (WidthSpacingFactor _) = "width"
+    spacingMeta (SizeSpacingFactor _) = "size"
+    spacingMeta (ANNSpacing _) = "ANN"
 
 run _ = do
   fail "This command is not defined for this input type."

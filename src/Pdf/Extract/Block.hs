@@ -54,6 +54,18 @@ instance Linearizable a => Linearizable (BlockCategory a) where
   linearize (Footline a) = linearizeWithState _lo_Footline a
   linearize (BlockQuote a) = linearizeWithState _lo_BlockQuote a
 
+
+-- | Get the item from the labelled block.
+unwrapBlock :: BlockCategory a -> a
+unwrapBlock (DefaultBlock a) = a
+unwrapBlock (FirstOfParagraph a) = a
+unwrapBlock (Custos a) = a
+unwrapBlock (SheetSignature a) = a
+unwrapBlock (Headline a) = a
+unwrapBlock (Footline a) = a
+unwrapBlock (BlockQuote a) = a
+
+
 -- * Calling categorizers
 
 -- | A 'BlockCategorizer' is a categorization function with a uniform

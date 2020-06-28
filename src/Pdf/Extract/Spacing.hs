@@ -170,6 +170,14 @@ cleanForSpaceTraining =
   T.lines                        -- split into lines
 
 
+-- | Validate that the text in a line of input data and in a line of
+-- training data is the same.
+validateSameText :: Glyph g => [g] -> [LeftSpacing Char] -> Bool
+validateSameText glyphs gold =
+  (T.concat $ map (fromMaybe "" . text) glyphs) ==
+  (T.pack $ map withoutSpace gold)
+
+
 -- | Generate a data vector from a 'Glyph'.
 singleGlyphSpacingVector :: Glyph g => g -> V.Vector Double
 singleGlyphSpacingVector g =
@@ -251,10 +259,21 @@ trainingShape :: KnownNat n =>
                  LeftSpacing Char -- ^ label data, i.e. a character wrapped into 'LeftSpacing'
               -> V.Vector Double  -- ^ a data vector
               -> Maybe (S ('D1 n), SpacingOutput)
-trainingShape (NoSpace _) v = (,) <$> (fromStorable v) <*> oneHot 0
-trainingShape (SpaceAfter _) v = (,) <$> (fromStorable v) <*> oneHot 1
-trainingShape (SpaceBefore _) v = (,) <$> (fromStorable v) <*> oneHot 1 -- FIXME: if ever used
-trainingShape (SpaceAround _) v = (,) <$> (fromStorable v) <*> oneHot 1 -- FIXME: if ever used
+-- trainingShape (NoSpace _) v = (,) <$> (fromStorable v) <*> oneHot 0
+-- trainingShape (SpaceAfter _) v = (,) <$> (fromStorable v) <*> oneHot 1
+-- trainingShape (SpaceBefore _) v = (,) <$> (fromStorable v) <*> oneHot 1 -- FIXME: if ever used
+-- trainingShape (SpaceAround _) v = (,) <$> (fromStorable v) <*> oneHot 1 -- FIXME: if ever used
+trainingShape sp v = (,) <$> (fromStorable v) <*> (oneHot $ leftSpacingToLabel sp)
+
+-- | Make one-hot encoding labels from 'LeftSpacing'.
+leftSpacingToLabel :: LeftSpacing a -> Int
+leftSpacingToLabel (NoSpace _) = 0
+leftSpacingToLabel _ = 1
+
+-- | Return a 'LeftSpacing' constructor for an integer label.
+leftSpacingFromLabel :: Int -> (a -> LeftSpacing a)
+leftSpacingFromLabel 0 = NoSpace
+leftSpacingFromLabel _ = SpaceAfter
 
 
 -- | Verify training data (or testing data) and generate shaped data
@@ -414,7 +433,10 @@ runSpacingIteration log trainRows validateRows rate net i = do
     trainEach rate' !network (i, o) = train rate' network i o
 
 
--- | Calculate precision measures of a labeling result.
+-- | Calculate precision and recall of a labeling result. The first
+-- element in the tuples should be the result of the labeling process,
+-- the second the value of the gold standard. Both must be integers
+-- from the one-hot encoding of the labels.
 spacingPrecision :: (Ord b, Num b) => [(b, b)] -> String
 spacingPrecision res =
   "false positives: " ++ show falsePos ++
