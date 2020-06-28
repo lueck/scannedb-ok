@@ -357,8 +357,17 @@ command_ = subparser
    (info
     (helper <*> trainSpacing_)
     (fullDesc
-     <> progDesc "scannedb-ok trainSpacing   trains an ANN for inter-glyph spacing. This requires four input files: TRAININGPDF and TRAININGTXT must contain exactly the same text, once in PDF format (or some other format conaining glyph descriptions, like pdfminers xml), and once as plaintext with correct spaces. This pair of files is used for training the neurons. VALIDATIONPDF and VALIDATIONTXT have to be exactly corresponding texts, too. They are used to validate the trained network after each learning iteration and the validation result is logged, so that the progression can be observed. For a start, you can simply reuse the first pair of files as validation texts."
+     <> progDesc "scannedb-ok trainSpacing   trains an artificial neural network for inter-word space insertion. This requires two input files: TRAININGPDF and TRAININGTXT must contain exactly the same text, once in PDF (or XML) format, and once as plaintext with verified spaces. This pair of files is used for training the neurons. For validating the network see the validateSpacing command."
      <> header "scannedb-ok trainSpacing - Train spacing module."))   --
+   --
+   <>
+   command "validateSpacing"
+   (info
+    (helper <*> validateSpacing_)
+    (fullDesc
+     <> progDesc "scannedb-ok validateSpaces   validates inter-word space insertion by one of scannedb-ok's algorithms against a gold standard given in a plain text file. Precision and recall are calculated and returned to the user."
+     <> header "scannedb-ok validateSpaces - validate inter-word space insertion against a gold standard." ))
+   --
    <>
    command "nospaces"
     (info
@@ -390,14 +399,6 @@ command_ = subparser
      (fullDesc
       <> progDesc "scannedb-ok glyphs  shows information about the glyphs found in the document."
       <> header "scannedb-ok glyphs - Show information about the glyphs found in the document."))
-  --
-  <>
-  command "validateSpacing"
-   (info
-    (helper <*> validateSpacing_)
-    (fullDesc
-     <> progDesc "scannedb-ok validateSpaces   validates inter-word space insertion by on of scannedb-ok's algorithms against a gold standard given in a plain text file. Precision and recall are calculated and returned to the user."
-     <> header "scannedb-ok validateSpaces - validate inter-word space insertion against a gold standard." ))
   )
 
 
