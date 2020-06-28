@@ -109,6 +109,10 @@ data ExtractionCommand
   , validationTxt :: FilePath   -- ^ plaintext file with spaces for validation
   , inputFile :: String
   }
+  | ValidateForeignSpacing
+  { inputFile :: String
+  , goldStandard :: String
+  }
 
 
 -- | A record for the input type command line argument 
@@ -332,6 +336,15 @@ validateSpacing_ = ValidateSpacing
                     <> help "Path to the input file.")
 
 
+-- | A parser for the __validateForeignSpacing__ command.
+validateForeignSpacing_ :: Parser ExtractionCommand
+validateForeignSpacing_ = ValidateForeignSpacing
+  <$> argument str (metavar "INFILE"
+                    <> help "Path to the plain text input file.")
+  <*> argument str (metavar "GOLDSTANDARD"
+                    <> help "Path to the verified gold standard.")
+
+
 formatHint :: String
 formatHint = "\n\nTake care of the parentheses, square brackets and pipes in the usage note. Parentheses group options together, the pipe divides (groups of options) into alternatives. Square brackets mean that the option is optional. "
 
@@ -365,8 +378,16 @@ command_ = subparser
    (info
     (helper <*> validateSpacing_)
     (fullDesc
-     <> progDesc "scannedb-ok validateSpaces   validates inter-word space insertion by one of scannedb-ok's algorithms against a gold standard given in a plain text file. Precision and recall are calculated and returned to the user."
+     <> progDesc "scannedb-ok validateSpacing   validates inter-word space insertion by one of scannedb-ok's algorithms against a gold standard given in a plain text file. Precision and recall are calculated."
      <> header "scannedb-ok validateSpaces - validate inter-word space insertion against a gold standard." ))
+   --
+   <>
+   command "validateForeign"
+   (info
+    (helper <*> validateForeignSpacing_)
+    (fullDesc
+     <> progDesc "scannedb-ok validateForeign   validates inter-word space insertion in a foreign plain text file against a gold standard given in an other plain text file. Precision and recall are calculated."
+     <> header "scannedb-ok validateForeign - validate foreign inter-word space insertion against a gold standard." ))
    --
    <>
    command "nospaces"
@@ -858,6 +879,38 @@ run (ValidateSpacing inMeth ranges lineOpts spacing lineCategorizer txtFile inFi
     spacingMeta (WidthSpacingFactor _) = "width"
     spacingMeta (SizeSpacingFactor _) = "size"
     spacingMeta (ANNSpacing _) = "ANN"
+
+run (ValidateForeignSpacing silverFile goldFile) = do
+  silverSpaced <- T.readFile silverFile
+  goldSpaced <- T.readFile goldFile
+  let goldLines = map (representSpacesAfter . T.unpack) $
+                  cleanForSpaceTraining goldSpaced
+      silverLines = map (representSpacesAfter . T.unpack) $
+                    cleanForSpaceTraining silverSpaced
+  mapM_ (\(silver, gold) -> do
+            let plainSilver = map withoutSpace silver
+                plainGold = map withoutSpace gold
+            case plainSilver == plainGold of
+              True -> do
+                return ()
+              False -> do
+                fail $ "ERROR: input data does not match gold standard\n" ++
+                  plainSilver ++ "\n" ++ plainGold
+        ) $ zip silverLines goldLines
+  C.putStr $
+    Csv.encodeWith csvOptions $ (:[]) $
+    (\d -> precisionLabel 1 d
+           & prec_inputData .~ (Just silverFile)
+           & prec_goldStandard .~ (Just goldFile)
+           & prec_method .~ (Just "foreign")
+    ) $
+    zip
+    (concat $ map (map leftSpacingToLabel) silverLines)
+    (concat $ map (map leftSpacingToLabel) goldLines)
+  where
+    csvOptions = Csv.defaultEncodeOptions {
+      Csv.encIncludeHeader = True
+      }
 
 run _ = do
   fail "This command is not defined for this input type."
