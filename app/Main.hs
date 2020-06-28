@@ -784,13 +784,15 @@ run (SpacingStats inMeth ranges lineOpts inFile) = do
         , (width g2)
         , (size g2)):(spacingsInLine p l (g2:gs))
 
-run (TrainSpacing PdfMinerXml lineOpts iterations rate trainingPdf trainingTxt validationPdf validationTxt netFile) = do
-  ranges <- parseRanges "*"
+run (TrainSpacing inMeth lineOpts iterations rate trainingPdf trainingTxt validationPdf validationTxt netFile) = do
+  let ranges = "*"
   spaced <- T.readFile trainingTxt
-  glyphs <- B.readFile trainingPdf >>= parseXml ranges
+  pages <- getGlyphs inMeth ranges trainingPdf
   validationSpaced <- T.readFile validationTxt
-  validationGlyphs <- B.readFile validationPdf >>= parseXml ranges
-  let glyphLines = map (findLinesWindow lineOpts) glyphs
+  validationPages <- getGlyphs inMeth ranges validationPdf
+  let glyphs = map snd pages
+      validationGlyphs = map snd validationPages
+      glyphLines = map (findLinesWindow lineOpts) glyphs
       txtLines = cleanForSpaceTraining spaced
       linesByLines = zip txtLines (concat glyphLines)
       validationGlyphLines = map (findLinesWindow lineOpts) validationGlyphs
