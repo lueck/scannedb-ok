@@ -629,7 +629,7 @@ getPdfGlyphs :: String             -- ^ range
              -> FilePath           -- ^ path
              -> IO [(Int, [P.Glyph])]
 getPdfGlyphs pages inputFile = do
-  hPutStrLn stderr "PDF input does not work good at the moment, due to a third-party PDF-parsing library. Please, consider using the -x option!"
+  -- hPutStrLn stderr "PDF input does not work good at the moment, due to a third-party PDF-parsing library. Please, consider using the -x option!"
   ranges <- parseRanges pages
   P.withPdfFile inputFile $ \pdf -> do
     doc <- P.document pdf
@@ -871,7 +871,7 @@ run (ValidateSpacing inMeth ranges lineOpts spacing lineCategorizer txtFile inFi
            & prec_goldStandard .~ (Just txtFile)
            & prec_method .~ (Just $ spacingMeta spacing)
     ) $
-    zip (concat $ rights processed) (concat $ map (map leftSpacingToLabel) validationLines)
+    zip (concat $ map (map leftSpacingToLabel) validationLines) (concat $ rights processed)
   where
     csvOptions = Csv.defaultEncodeOptions {
       Csv.encIncludeHeader = True
@@ -905,8 +905,8 @@ run (ValidateForeignSpacing silverFile goldFile) = do
            & prec_method .~ (Just "foreign")
     ) $
     zip
-    (concat $ map (map leftSpacingToLabel) silverLines)
     (concat $ map (map leftSpacingToLabel) goldLines)
+    (concat $ map (map leftSpacingToLabel) silverLines)
   where
     csvOptions = Csv.defaultEncodeOptions {
       Csv.encIncludeHeader = True

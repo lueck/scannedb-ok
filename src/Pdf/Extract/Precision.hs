@@ -28,8 +28,8 @@ instance Csv.ToRecord Precision
 
 
 -- | Calculate precision and recall of a labelled result. The first
--- element in the tuples should be the result of the labeling process,
--- the second the value of the gold standard.
+-- element in the tuples should be the label of the gold standard the
+-- second the result of the labeling process.
 precisionLabel :: Eq b => b -> [(b, b)] -> Precision
 precisionLabel label res = Precision
   { _prec_total = length res
@@ -46,6 +46,6 @@ precisionLabel label res = Precision
   }
   where
     truePos = length $ filter ((&&) <$> (==label) . fst <*> (==label) . snd) res
-    falseNeg = length $ filter ((&&) <$> (/=label) . fst <*> (==label) . snd) res
+    falsePos = length $ filter ((&&) <$> (/=label) . fst <*> (==label) . snd) res
     trueNeg = length $ filter ((&&) <$> (/=label) . fst <*> (/=label) . snd) res
-    falsePos = length $ filter ((&&) <$> (==label) . fst <*> (/=label) . snd) res
+    falseNeg = length $ filter ((&&) <$> (==label) . fst <*> (/=label) . snd) res
