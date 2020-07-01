@@ -37,7 +37,7 @@ resolver: lts-12.26
 #  - auto-update
 #  - wai
 packages:
-- .
+# - .
 # - ../pdf-toolbox/core
 # - ../pdf-toolbox/content
 # - ../pdf-toolbox/document
@@ -52,7 +52,7 @@ extra-deps:
 # - github: Yuras/pdf-toolbox
 #   commit: d201d155e83ba9de947f8f89e5c4c245bb88c974
 - github: lueck/pdf-toolbox
-  commit: 0e2fe95b3270b7c90183d9a0bb37c614785e7be4
+  commit: aa97e6ce49402522bfb5d375b8c94e4b2302c143
   subdirs:
       - core
       - content

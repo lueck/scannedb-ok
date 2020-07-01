@@ -52,12 +52,7 @@ the most important is [`Glyph`](src/Pdf/Extract/Glyph.hs), which can
 be instantiated by the data types of a parser. Right now it can read
 PDFs using the [`pdf-toolbox`](https://github.com/Yuras/pdf-toolbox)
 written in Haskell, or the XML representation of a PDF document, which
-is yielded by PDFMiner's `pdf2txt.py -t xml ...` command. The results
-of the pipeline `pdfminer -t xml ... | scannedb-ok -x` are very
-promising (see [example](#example) below), while parsing PDFs directly
-with the `pdf-toolbox` still suffers from several deficiencies. **At
-the moment, piping PDFMiner's `-t xml`-output into `scannedb-ok` is
-the way to go.**
+is yielded by PDFMiner's `pdf2txt.py -t xml ...` command.
 
 `scannedb-ok` is still under development.
 
