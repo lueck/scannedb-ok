@@ -60,7 +60,13 @@ is yielded by PDFMiner's `pdf2txt.py -t xml ...` command.
 ## Installation
 
 For building and installing [`stack`](https://docs.haskellstack.org),
-the haskell build tool, is required.
+the haskell build tool, is required. Development files for
+[`BLAS`](http://www.netlib.org/blas/) and
+[`LAPACK`](http://www.netlib.org/lapack/) are also required on the
+system. On a Debian-based GNU / Linux system they can be installed
+with
+
+	sudo apt install libblas-dev liblapack-dev
 
 Clone this repository and `cd` into the `scannedb-ok` directory and
 run
