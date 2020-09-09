@@ -1,4 +1,4 @@
-# scannedb-ok
+# scannedb-ok [![Build Status](https://travis-ci.org/lueck/scannedb-ok.svg?branch=master)](https://travis-ci.org/lueck/scannedb-ok)
 
 `scannedb-ok` extracts text from a PDF and was written with
 [Google Books](http://books.google.com) in mind. Google's optical
