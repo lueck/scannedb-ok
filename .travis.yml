@@ -23,6 +23,8 @@ addons:
     - hvr-ghc
     packages:
     - ghc-8.4.4
+    - libblas-dev
+    - liblapack-dev
 
 script:
   - stack -j 2 build --no-terminal
